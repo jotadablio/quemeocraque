@@ -1,4 +1,3 @@
-// Vamos usar a 'export const' para que o App.jsx possa importá-la.
 export const allPlayers = [
   {
     name: "Messi",
@@ -61,3 +60,4 @@ export const allPlayers = [
     textColor: "#000000"
   }
 ];
+
