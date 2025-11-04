@@ -54,7 +54,7 @@ export const allPlayers = [
     textColor: "#FFFFFF"
   },
   {
-    name:Vini. Jr",
+    name: "Vini. Jr",
     img: "https://placehold.co/150x150/FFFFFF/000000?text=Vini+Jr",
     color: "#FEBE10", // Cor do Real Madrid
     textColor: "#000000"
