@@ -26,12 +26,13 @@ import { allPlayers } from './database.js';
 
 // PASSO CRUCIAL: COLE A SUA CONFIGURAÇÃO DO FIREBASE AQUI!
 const firebaseConfig = {
-  apiKey: "COLE_A_SUA_API_KEY_AQUI",
-  authDomain: "SEU_PROJETO.firebaseapp.com",
-  projectId: "SEU_PROJETO_ID",
-  storageBucket: "SEU_PROJETO.appspot.com",
-  messagingSenderId: "SEU_SENDER_ID",
-  appId: "SUA_APP_ID"
+  apiKey: "AIzaSyDXuNhUFz4z6x-SoI8jmlj9yuOhnNfRI1o",
+  authDomain: "jogoquemeocraque.firebaseapp.com",
+  projectId: "jogoquemeocraque",
+  storageBucket: "jogoquemeocraque.firebasestorage.app",
+  messagingSenderId: "703914878271",
+  appId: "1:703914878271:web:7b16fc1d02e6ac46acdf8a",
+  measurementId: "G-B339KXCEC1"
 };
 
 // --- 3. INICIALIZAÇÃO DA APLICAÇÃO ---
