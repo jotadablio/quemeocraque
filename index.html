@@ -1,23 +1,17 @@
 <!DOCTYPE html>
 <!-- 
-  FICHEIRO 1 de 3 (Versão 10)
-  Este é o "esqueleto" HTML. 
-  Ele usa um "importmap" para carregar o React, o Firebase e os nossos
-  outros dois ficheiros .js (app.js e database.js) como módulos.
+  FICHEIRO 1 de 3 (Versão 11)
+  CORREÇÃO: Corrigido 'typea="module"' para 'type="module"' na última linha.
 -->
 <html lang="pt-br" class="h-full bg-gray-900">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quem é o Craque? (v10)</title>
+  <title>Quem é o Craque? (v11)</title>
   <!-- Carrega o Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- 
-    IMPORTMAP:
-    Isto diz ao navegador onde encontrar os "imports" que o app.js vai pedir.
-    É o que nos permite usar 'import React from "react"' sem um build.
-  -->
+  <!-- IMPORTMAP -->
   <script type="importmap">
     {
       "imports": {
@@ -37,10 +31,8 @@
   
   <!-- 
     CARREGAR A APLICAÇÃO:
-    Este é o ponto de entrada. O navegador vai carregar o app.js, 
-    e o app.js vai carregar o React, Firebase, e database.js
-    usando o "importmap" que definimos acima.
+    CORRIGIDO de 'typea' para 'type'.
   -->
-  <script typea="module" src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
