@@ -32,7 +32,7 @@ const firebaseConfig = {
   storageBucket: "jogoquemeocraque.firebasestorage.app",
   messagingSenderId: "703914878271",
   appId: "1:703914878271:web:7b16fc1d02e6ac46acdf8a",
-  measurementId: "G-B339KXCEC1"
+  measurementId: "G-B339KXCEC1",
 };
 
 // --- 3. INICIALIZAÇÃO DA APLICAÇÃO ---
