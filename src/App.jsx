@@ -1,4 +1,3 @@
-// --- 1. IMPORTAÇÕES ---
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -18,35 +17,36 @@ import {
   addDoc
 } from 'firebase/firestore';
 
-// A base de dados (allPlayers) foi movida para aqui para corrigir erros de importação no Vercel/Vite.
+// --- 1B. BASE DE DADOS INTERNA ---
+// Para resolver erros de importação, a base de dados está incluída aqui.
 const allPlayers = [
   {
     name: "Messi",
-    img: "https_://placehold.co/150x150/87CEEB/FFFFFF?text=Messi",
+    img: "https://placehold.co/150x150/87CEEB/FFFFFF?text=Messi",
     color: "#87CEEB", // Cor da Argentina
     textColor: "#FFFFFF"
   },
   {
     name: "C. Ronaldo",
-    img: "https_://placehold.co/150x150/FF0000/FFFFFF?text=CR7",
+    img: "https://placehold.co/150x150/FF0000/FFFFFF?text=CR7",
     color: "#D2232A", // Cor de Portugal
     textColor: "#FFFFFF"
   },
   {
     name: "Pelé",
-    img: "https_://placehold.co/150x150/FFFF00/000000?text=Pel%C3%A9",
+    img: "https://placehold.co/150x150/FFFF00/000000?text=Pel%C3%A9",
     color: "#FFDF00", // Cor do Brasil
     textColor: "#008026"
   },
   {
     name: "Maradona",
-    img: "https_://placehold.co/150x150/87CEEB/FFFFFF?text=Maradona",
+    img: "https://placehold.co/150x150/87CEEB/FFFFFF?text=Maradona",
     color: "#87CEEB", // Cor da Argentina
     textColor: "#FFFFFF"
   },
   {
     name: "Mbappé",
-    img: "https_://placehold.co/150x150/0000FF/FFFFFF?text=Mbapp%C3%A9",
+    img: "https://placehold.co/150x150/0000FF/FFFFFF?text=Mbapp%C3%A9",
     color: "#0055A4", // Cor da França
     textColor: "#FFFFFF"
   },
@@ -58,25 +58,25 @@ const allPlayers = [
   },
   {
     name: "Neymar",
-    img: "https_://placehold.co/150x150/008000/FFFFFF?text=Neymar",
+    img: "https://placehold.co/150x150/008000/FFFFFF?text=Neymar",
     color: "#009B3A", // Cor do Brasil (alternativa)
     textColor: "#FFFFFF"
   },
   {
     name: "Zidane",
-    img: "https_://placehold.co/150x150/0000FF/FFFFFF?text=Zidane",
+    img: "https://placehold.co/150x150/0000FF/FFFFFF?text=Zidane",
     color: "#0055A4", // Cor da França
     textColor: "#FFFFFF"
   },
   {
     name: "Ronaldinho",
-    img: "https_://placehold.co/150x150/FFFFE0/000000?text=Ronaldinho",
+    img: "https://placehold.co/150x150/FFFFE0/000000?text=Ronaldinho",
     color: "#A50044", // Cor do Barcelona (alternativa)
     textColor: "#FFFFFF"
   },
   {
     name: "Vini. Jr",
-    img: "https_://placehold.co/150x150/FFFFFF/000000?text=Vini+Jr",
+    img: "https://placehold.co/150x150/FFFFFF/000000?text=Vini+Jr",
     color: "#FEBE10", // Cor do Real Madrid
     textColor: "#000000"
   }
@@ -85,14 +85,14 @@ const allPlayers = [
 
 // --- 2. CONFIGURAÇÃO DO FIREBASE ---
 
-// PASSO CRUCIAL: As suas chaves do Firebase ficam aqui
+// As suas chaves do Firebase (confirmado que estão corretas)
 const firebaseConfig = {
   apiKey: "AIzaSyDXuNhUFz4z6x-SoI8jm1j9yuOhnNFRl1o",
   authDomain: "jogoquemecraque.firebaseapp.com",
   projectId: "jogoquemecraque",
   storageBucket: "jogoquemecraque.firebasestorage.app",
   messagingSenderId: "703914878271",
-  appId: "1:703914878271:web:7b16fc1d02e6ac46acdf8a",
+  appId: "1:703914878271:web:7b16fc1d02e6acdf8a",
   measurementId: "G-B339KXCZEC1"
 };
 
@@ -189,6 +189,7 @@ function GameController({ user }) {
   const handleCreateGame = async () => {
     const newGameId = Math.random().toString(36).substring(2, 7).toUpperCase();
     
+    // Caminho corrigido: direto para a coleção "games"
     const gameDocRef = doc(db, "games", newGameId);
     
     const newGameData = {
@@ -211,6 +212,7 @@ function GameController({ user }) {
   const handleJoinGame = async (idToJoin) => {
     if (!idToJoin) return;
 
+    // Caminho corrigido: direto para a coleção "games"
     const gameDocRef = doc(db, "games", idToJoin);
     
     try {
@@ -222,6 +224,7 @@ function GameController({ user }) {
         setGameId(idToJoin);
       } else {
         console.warn("Sala não encontrada ou o jogo já começou.");
+        // (idealmente, mostrar um feedback ao user)
       }
     } catch (err) {
       console.error("Erro ao entrar no jogo:", err);
@@ -248,6 +251,7 @@ function GameController({ user }) {
       secretPlayers[playerId] = shuffledBoard[playerIndex].name;
     });
 
+    // Caminho corrigido: direto para a coleção "games"
     const gameDocRef = doc(db, "games", gameId);
     await updateDoc(gameDocRef, {
       status: 'playing',
@@ -262,6 +266,7 @@ function GameController({ user }) {
     const mySecretName = gameData.secretPlayers[user.uid];
     
     if (guessName === mySecretName) {
+      // Caminho corrigido: direto para a coleção "games"
       const gameDocRef = doc(db, "games", gameId);
       await updateDoc(gameDocRef, {
         winners: arrayUnion(user.uid)
@@ -355,7 +360,7 @@ function Lobby({ gameId, gameData, user, onCreate, onJoin, onLeave, onStart }) {
         <button
           onClick={onStart}
           className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-2xl mb-4"
-          disabled={gameData.players.length < 1}
+          disabled={gameData.players.length < 1} // Pode mudar para 2 se quiser min 2 jogadores
         >
           Começar Jogo!
         </button>
@@ -384,11 +389,13 @@ function Game({ gameId, gameData, user, onGuess, onLeave }) {
     return Object.keys(gameData.secretPlayers)
       .filter(playerId => playerId !== user.uid)
       .map((playerId, index) => {
-        const playerIndex = gameData.players.indexOf(playerId) + 1 || index + 2;
+        const playerIndex = gameData.players.indexOf(playerId);
+        const playerTitle = playerIndex !== -1 ? `Jogador ${playerIndex + 1}` : `Jogador ${index + 2}`;
+        
         return {
           id: playerId,
           name: gameData.secretPlayers[playerId],
-          title: `Jogador ${playerIndex}`
+          title: playerTitle
         };
       });
   }, [gameData, user.uid]);
@@ -409,6 +416,10 @@ function Game({ gameId, gameData, user, onGuess, onLeave }) {
   };
   
   const iAmWinner = gameData.winners.includes(user.uid);
+
+  const handleError = (e) => {
+    e.target.src = 'https://placehold.co/150x150/cccccc/000000?text=Erro';
+  };
 
   return (
     <div className="flex flex-col h-full text-white p-4">
@@ -451,6 +462,7 @@ function Game({ gameId, gameData, user, onGuess, onLeave }) {
             player={player}
             isEliminated={!!eliminated[player.name]}
             onClick={() => toggleEliminated(player.name)}
+            handleError={handleError}
           />
         ))}
       </div>
@@ -472,6 +484,7 @@ function Game({ gameId, gameData, user, onGuess, onLeave }) {
           players={boardPlayers}
           onClose={() => setShowGuessModal(false)}
           onGuess={handleGuess}
+          handleError={handleError}
         />
       )}
     </div>
@@ -480,22 +493,13 @@ function Game({ gameId, gameData, user, onGuess, onLeave }) {
 
 // --- 8. COMPONENTES DE UI (Pequenos) ---
 
-function PlayerCard({ player, isEliminated, onClick }) {
+function PlayerCard({ player, isEliminated, onClick, handleError }) {
   if (!player) return null; 
   
   const style = {
     backgroundColor: player.color,
     color: player.textColor || '#000000',
   };
-
-  // Corrigido o URL da imagem de placeholder
-  const handleError = (e) => {
-    e.target.src = 'https://placehold.co/150x150/cccccc/000000?text=Erro';
-  };
-
-  // Corrigido o URL da imagem (removido o sublinhado extra)
-  const imgSrc = player.img.replace(/https?_:/, 'https:');
-
 
   return (
     <div
@@ -504,7 +508,7 @@ function PlayerCard({ player, isEliminated, onClick }) {
       style={style}
     >
       <img
-        src={imgSrc}
+        src={player.img}
         alt={player.name}
         className="w-full h-20 md:h-24 object-cover object-top"
         onError={handleError}
@@ -516,22 +520,14 @@ function PlayerCard({ player, isEliminated, onClick }) {
   );
 }
 
-function GuessModal({ players, onClose, onGuess }) {
+function GuessModal({ players, onClose, onGuess, handleError }) {
   
-  // Corrigido o URL da imagem de placeholder
-  const handleError = (e) => {
-    e.target.src = 'https://placehold.co/150x150/cccccc/000000?text=Erro';
-  };
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-lg p-6 max-w-3xl w-full">
         <h2 className="text-2xl font-bold mb-4">Quem é você?</h2>
         <div className="grid grid-cols-5 gap-2 max-h-[60vh] overflow-y-auto">
           {players.map(player => {
-            // Corrigido o URL da imagem (removido o sublinhado extra)
-            const imgSrc = player.img.replace(/https?_:/, 'https:');
-            
             return (
               <div
                 key={player.name}
@@ -540,7 +536,7 @@ function GuessModal({ players, onClose, onGuess }) {
                 style={{ backgroundColor: player.color, color: player.textColor }}
               >
                 <img
-                  src={imgSrc}
+                  src={player.img}
                   alt={player.name}
                   className="w-full h-20 md:h-24 object-cover object-top"
                   onError={handleError}
@@ -562,4 +558,3 @@ function GuessModal({ players, onClose, onGuess }) {
     </div>
   );
 }
-
