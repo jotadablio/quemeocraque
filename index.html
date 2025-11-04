@@ -1,443 +1,691 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quem é o Craque? (v3)</title>
+    <title>Quem é o Craque? (V5 - Online)</title>
+    <!-- 1. Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 2. React e ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    
+    <!-- 3. Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" type="module"></script>
+    
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        /* Estilo base para a página enquanto o React carrega */
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8; /* Fundo mais suave */
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         }
-        /* Estilo para o card "eliminado" */
-        .card.eliminated {
-            opacity: 0.3;
-            filter: grayscale(100%);
-            transition: all 0.3s ease;
-            border-color: transparent;
+        #root {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #111827; /* bg-gray-900 */
         }
-        .card {
-            transition: all 0.3s ease;
-            cursor: pointer;
-            user-select: none; /* Impede a seleção de texto/imagem */
-            border: 4px solid transparent;
-        }
-        .card:not(.eliminated):hover {
-            transform: scale(1.05);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.15);
-            border-color: #3b82f6; /* Destaque azul ao passar o mouse */
-            z-index: 10;
-            position: relative;
-        }
-        .btn {
-            @apply font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 ease-in-out transform hover:scale-105;
-        }
-        .btn-primary {
-            @apply bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700;
-        }
-        .btn-secondary {
-            @apply bg-gradient-to-r from-gray-500 to-gray-600 text-white hover:from-gray-600 hover:to-gray-700;
+        .loading-text {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: white;
         }
     </style>
 </head>
-<body class="flex flex-col min-h-screen">
+<body class="bg-gray-900">
+    <!-- O React irá controlar este elemento -->
+    <div id="root">
+        <div class="loading-text">A carregar o jogo...</div>
+    </div>
 
-    <!-- CABEÇALHO -->
-    <header class="bg-gradient-to-b from-green-700 to-green-800 text-white p-6 shadow-lg text-center">
-        <h1 class="text-4xl md:text-5xl font-black tracking-tight">Quem é o Craque?</h1>
-        <p class="text-lg text-green-200 mt-2">O seu "Cara-a-Cara" de Futebol!</p>
-    </header>
+    <!-- 4. O nosso código React (V5) -->
+    <script type="module">
+        // Importa as funções do Firebase a partir dos scripts carregados
+        import { initializeApp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc, 
+            updateDoc, 
+            onSnapshot, 
+            collection, 
+            writeBatch,
+            deleteDoc,
+            query,
+            serverTimestamp,
+            deleteField,
+            arrayUnion 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    <main class="flex-grow p-4 md:p-8">
-        <div class="max-w-6xl mx-auto w-full">
+        // O React e o ReactDOM estão disponíveis globalmente (window.React, window.ReactDOM)
+        const { useState, useEffect, useCallback, useMemo } = React;
 
-            <!-- PAINEL DE CONTROLE -->
-            <div class="bg-white p-6 rounded-xl shadow-xl mb-8 flex flex-col md:flex-row md:items-center gap-4 border-t-4 border-blue-500">
-                <div class="flex-1">
-                    <label for="seed" class="block text-sm font-bold text-gray-700 mb-1">SEED DA PARTIDA (Combine com amigos)</label>
-                    <input type="text" id="seed" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-lg p-3" placeholder="Ex: 'copa2002' ou '12345'">
-                </div>
-                <button id="generate-board" class="btn btn-primary w-full md:w-auto text-lg">
-                    Gerar Tabuleiro
-                </button>
-            </div>
+        // --- Configuração do Firebase ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id-quem-e-craque';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-            <!-- PAINEL DO JOGADOR SECRETO -->
-            <div id="secret-player-panel" class="hidden text-center bg-gradient-to-br from-gray-800 to-gray-900 text-white p-6 rounded-xl shadow-2xl mb-8 border-4 border-yellow-400">
-                <h2 class="text-2xl font-bold mb-2 text-yellow-300">Seu Jogador Secreto é...</h2>
-                <p class="text-sm text-gray-300 mb-4">(É este jogador que seus amigos tentarão adivinhar!)</p>
-                <div id="secret-player-card" class="inline-flex flex-col items-center p-4 bg-white/10 rounded-lg">
-                    <img id="secret-img" src="https://placehold.co/100x100/e2e8f0/cccccc?text=?" alt="Jogador Secreto" class="w-24 h-24 rounded-full object-cover border-4 border-yellow-400 shadow-lg">
-                    <span id="secret-name" class="mt-3 text-2xl font-bold">[???]</span>
-                </div>
-                <button id="draw-secret-player" class="btn btn-secondary mt-5 text-sm py-2 px-4">
-                    Sortear novo
-                </button>
-            </div>
+        // Inicializa o Firebase
+        let app, dbGlobal, authGlobal;
+        try {
+            app = initializeApp(firebaseConfig);
+            dbGlobal = getFirestore(app);
+            authGlobal = getAuth(app);
+            setLogLevel('debug'); // Ativa logs detalhados
+            console.log("Firebase inicializado com sucesso.");
+        } catch (e) {
+            console.error("Erro ao inicializar o Firebase:", e);
+            document.getElementById('root').innerHTML = '<div class="loading-text" style="color: red;">Erro na configuração do Firebase. Verifique as credenciais.</div>';
+        }
 
-            <!-- O TABULEIRO DO JOGO -->
-            <div id="game-board" class="grid grid-cols-5 gap-3 md:gap-5">
-                <!-- Os cards serão gerados pelo JavaScript aqui -->
-            </div>
 
-            <!-- MENSAGEM INICIAL -->
-            <div id="initial-message" class="text-center p-10 bg-white rounded-lg shadow-xl">
-                <p class="text-2xl font-semibold text-gray-700">Use o "Seed" e clique em "Gerar Tabuleiro" para começar!</p>
-            </div>
-        </div>
-    </main>
-
-    <footer class="text-center p-4 text-gray-500 text-sm">
-        Protótipo V3
-    </footer>
-
-    <script>
-        // --- BANCO DE DADOS DE 300 JOGADORES (COM CORES) ---
-        // Cores de Times/Seleções aplicadas nos placeholders
+        // --- Banco de Dados de Jogadores ---
         const allPlayers = [
-            // Lendas Top (Cores das Seleções)
-            { name: "Pelé", img: `https://placehold.co/150x150/FFFF00/000?text=${encodeURIComponent('Pelé')}` }, // Brasil
-            { name: "Maradona", img: `https://placehold.co/150x150/87CEEB/000?text=${encodeURIComponent('Maradona')}` }, // Argentina
-            { name: "Messi", img: `https://placehold.co/150x150/87CEEB/000?text=${encodeURIComponent('Messi')}` }, // Argentina
-            { name: "C. Ronaldo", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('CR7')}` }, // Portugal
-            { name: "Ronaldo F.", img: `https://placehold.co/150x150/FFFF00/000?text=${encodeURIComponent('Ronaldo')}` }, // Brasil
-            { name: "Zidane", img: `https://placehold.co/150x150/0000FF/FFF?text=${encodeURIComponent('Zidane')}` }, // França
-            { name: "Cruyff", img: `https://placehold.co/150x150/FFA500/000?text=${encodeURIComponent('Cruyff')}` }, // Holanda
-            { name: "Beckenbauer", img: `https://placehold.co/150x150/DDDDDD/000?text=${encodeURIComponent('Beckenbauer')}` }, // Alemanha
-            { name: "Di Stéfano", img: `https://placehold.co/150x150/87CEEB/000?text=${encodeURIComponent('Di Stéfano')}` }, // Argentina/Espanha
-            { name: "Puskás", img: `https://placehold.co/150x150/FFC0CB/000?text=${encodeURIComponent('Puskás')}` }, // Hungria
-            { name: "Garrincha", img: `https://placehold.co/150x150/FFFF00/000?text=${encodeURIComponent('Garrincha')}` }, // Brasil
-            { name: "Zico", img: `https://placehold.co/150x150/FF0000/000?text=${encodeURIComponent('Zico')}` }, // Flamengo
-            { name: "Platini", img: `https://placehold.co/150x150/0000FF/FFF?text=${encodeURIComponent('Platini')}` }, // França
-            { name: "Maldini", img: `https://placehold.co/150x150/AC0000/FFF?text=${encodeURIComponent('Maldini')}` }, // Milan
-            { name: "Baresi", img: `https://placehold.co/150x150/AC0000/FFF?text=${encodeURIComponent('Baresi')}` }, // Milan
-            { name: "Romário", img: `https://placehold.co/150x150/FFFF00/000?text=${encodeURIComponent('Romário')}` }, // Brasil
-            { name: "Van Basten", img: `https://placehold.co/150x150/FFA500/000?text=${encodeURIComponent('Van Basten')}` }, // Holanda
-            { name: "Eusébio", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('Eusébio')}` }, // Portugal
-            { name: "Yashin", img: `https://placehold.co/150x150/333333/FFF?text=${encodeURIComponent('Yashin')}` }, // URSS
-            { name: "Bobby Charlton", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Charlton')}` }, // Inglaterra
-            { name: "George Best", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Best')}` }, // Man Utd
-            { name: "Gerd Müller", img: `https://placehold.co/150x150/DDDDDD/000?text=${encodeURIComponent('G. Müller')}` }, // Alemanha
-            { name: "Rivelino", img: `https://placehold.co/150x150/FFFF00/000?text=${encodeURIComponent('Rivelino')}` }, // Brasil
-            { name: "Sócrates", img: `https://placehold.co/150x150/000000/FFF?text=${encodeURIComponent('Sócrates')}` }, // Corinthians
-            { name: "Cafu", img: `https://placehold.co/150x150/FFFF00/000?text=${encodeURIComponent('Cafu')}` }, // Brasil
-            { name: "Roberto Carlos", img: `https://placehold.co/150x150/FFFF00/000?text=${encodeURIComponent('R. Carlos')}` }, // Brasil
-            { name: "Rivaldo", img: `https://placehold.co/150x150/FFFF00/000?text=${encodeURIComponent('Rivaldo')}` }, // Brasil
-            { name: "Kaká", img: `https://placehold.co/150x150/AC0000/FFF?text=${encodeURIComponent('Kaká')}` }, // Milan
-            { name: "Ronaldinho", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Ronaldinho')}` }, // Barcelona
-            { name: "Kempes", img: `https://placehold.co/150x150/87CEEB/000?text=${encodeURIComponent('Kempes')}` }, // Argentina
-            { name: "Passarella", img: `https://placehold.co/150x150/87CEEB/000?text=${encodeURIComponent('Passarella')}` }, // Argentina
-            { name: "Batistuta", img: `https://placehold.co/150x150/87CEEB/000?text=${encodeURIComponent('Batistuta')}` }, // Argentina
-            { name: "Riquelme", img: `https://placehold.co/150x150/000080/FFFF00?text=${encodeURIComponent('Riquelme')}` }, // Boca
-            { name: "Buffon", img: `https://placehold.co/150x150/000080/FFF?text=${encodeURIComponent('Buffon')}` }, // Italia
-            { name: "Cannavaro", img: `https://placehold.co/150x150/000080/FFF?text=${encodeURIComponent('Cannavaro')}` }, // Italia
-            { name: "Totti", img: `https://placehold.co/150x150/8E2B2F/FFF?text=${encodeURIComponent('Totti')}` }, // Roma
-            { name: "Del Piero", img: `https://placehold.co/150x150/000000/FFF?text=${encodeURIComponent('Del Piero')}` }, // Juventus
-            { name: "Pirlo", img: `https://placehold.co/150x150/000080/FFF?text=${encodeURIComponent('Pirlo')}` }, // Italia
-            { name: "Baggio", img: `https://placehold.co/150x150/000080/FFF?text=${encodeURIComponent('Baggio')}` }, // Italia
-            { name: "Nesta", img: `https://placehold.co/150x150/AC0000/FFF?text=${encodeURIComponent('Nesta')}` }, // Milan
-            { name: "Rummenigge", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Rummenigge')}` }, // Bayern
-            { name: "Matthäus", img: `https://placehold.co/150x150/DDDDDD/000?text=${encodeURIComponent('Matthäus')}` }, // Alemanha
-            { name: "Kahn", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Kahn')}` }, // Bayern
-            { name: "Lahm", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Lahm')}` }, // Bayern
-            { name: "Henry", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('Henry')}` }, // Arsenal
-            { name: "Thuram", img: `https://placehold.co/150x150/0000FF/FFF?text=${encodeURIComponent('Thuram')}` }, // França
-            { name: "Deschamps", img: `https://placehold.co/150x150/0000FF/FFF?text=${encodeURIComponent('Deschamps')}` }, // França
-            { name: "Gullit", img: `https://placehold.co/150x150/FFA500/000?text=${encodeURIComponent('Gullit')}` }, // Holanda
-            { name: "Rijkaard", img: `https://placehold.co/150x150/FFA500/000?text=${encodeURIComponent('Rijkaard')}` }, // Holanda
-            { name: "Bergkamp", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('Bergkamp')}` }, // Arsenal
-            { name: "Robben", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Robben')}` }, // Bayern
-            { name: "Xavi", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Xavi')}` }, // Barcelona
-            { name: "Iniesta", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Iniesta')}` }, // Barcelona
-            { name: "Casillas", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Casillas')}` }, // Real Madrid
-            { name: "Raúl", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Raúl')}` }, // Real Madrid
-            { name: "Puyol", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Puyol')}` }, // Barcelona
-            { name: "Figo", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('Figo')}` }, // Portugal
-            { name: "Drogba", img: `https://placehold.co/150x150/034694/FFF?text=${encodeURIComponent('Drogba')}` }, // Chelsea
-            { name: "Eto'o", img: `https://placehold.co/150x150/007A5E/FFF?text=${encodeURIComponent("Eto'o")}` }, // CamCamarões
-            { name: "Weah", img: `https://placehold.co/150x150/AC0000/FFF?text=${encodeURIComponent('Weah')}` }, // Milan
-            { name: "Moore", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Moore')}` }, // Inglaterra
-            { name: "Beckham", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Beckham')}` }, // Man Utd
-            { name: "Gerrard", img: `https://placehold.co/150x150/C8102E/FFF?text=${encodeURIComponent('Gerrard')}` }, // Liverpool
-            { name: "Lampard", img: `https://placehold.co/150x150/034694/FFF?text=${encodeURIComponent('Lampard')}` }, // Chelsea
-            { name: "Rooney", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Rooney')}` }, // Man Utd
-            { name: "Schmeichel", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Schmeichel')}` }, // Man Utd
-            { name: "Stoichkov", img: `https://placehold.co/150x150/00966E/FFF?text=${encodeURIComponent('Stoichkov')}` }, // Bulgaria
-            { name: "Hagi", img: `https://placehold.co/150x150/FCD116/000?text=${encodeURIComponent('Hagi')}` }, // Romenia
-            { name: "Suker", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('Suker')}` }, // Croacia
-            { name: "Nedved", img: `https://placehold.co/150x150/000000/FFF?text=${encodeURIComponent('Nedved')}` }, // Juventus
-            { name: "Shevchenko", img: `https://placehold.co/150x150/AC0000/FFF?text=${encodeURIComponent('Shevchenko')}` }, // Milan
-            { name: "Cantona", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Cantona')}` }, // Man Utd
-            { name: "Scholes", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Scholes')}` }, // Man Utd
-            { name: "Giggs", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Giggs')}` }, // Man Utd
-            { name: "Zanetti", img: `https://placehold.co/150x150/0068C1/FFF?text=${encodeURIComponent('Zanetti')}` }, // Inter
-            { name: "Hierro", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Hierro')}` }, // Real Madrid
-            { name: "Laudrup", img: `https://placehold.co/150x150/C8102E/FFF?text=${encodeURIComponent('Laudrup')}` }, // Dinamarca
-            { name: "Kopa", img: `https://placehold.co/150x150/0000FF/FFF?text=${encodeURIComponent('Kopa')}` }, // França
-            { name: "Fontaine", img: `https://placehold.co/150x150/0000FF/FFF?text=${encodeURIComponent('Fontaine')}` }, // França
-            { name: "Rivera", img: `https://placehold.co/150x150/AC0000/FFF?text=${encodeURIComponent('Rivera')}` }, // Milan
-            { name: "Zoff", img: `https://placehold.co/150x150/000080/FFF?text=${encodeURIComponent('Zoff')}` }, // Italia
-            { name: "Banks", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Banks')}` }, // Inglaterra
-            { name: "Klinnsmann", img: `https://placehold.co/150x150/DDDDDD/000?text=${encodeURIComponent('Klinnsmann')}` }, // Alemanha
-            { name: "Völler", img: `https://placehold.co/150x150/DDDDDD/000?text=${encodeURIComponent('Völler')}` }, // Alemanha
-            { name: "Brehme", img: `https://placehold.co/150x150/DDDDDD/000?text=${encodeURIComponent('Brehme')}` }, // Alemanha
-            { name: "Valderrama", img: `https://placehold.co/150x150/FCD116/000?text=${encodeURIComponent('Valderrama')}` }, // Colombia
-            { name: "Higuita", img: `https://placehold.co/150x150/FCD116/000?text=${encodeURIComponent('Higuita')}` }, // Colombia
-            { name: "Sanchez", img: `https://placehold.co/150x150/006847/FFF?text=${encodeURIComponent('Sanchez')}` }, // Mexico
-            { name: "Figueroa", img: `https://placehold.co/150x150/DA291C/FFF?text=${encodeURIComponent('Figueroa')}` }, // Chile
-            { name: "Zamorano", img: `https://placehold.co/150x150/DA291C/FFF?text=${encodeURIComponent('Zamorano')}` }, // Chile
-            { name: "Salas", img: `https://placehold.co/150x150/DA291C/FFF?text=${encodeURIComponent('Salas')}` }, // Chile
-            { name: "Francescoli", img: `https://placehold.co/150x150/56A8E0/000?text=${encodeURIComponent('Francescoli')}` }, // Uruguai
-            { name: "Forlan", img: `https://placehold.co/150x150/56A8E0/000?text=${encodeURIComponent('Forlan')}` }, // Uruguai
-            { name: "Caniggia", img: `https://placehold.co/150x150/87CEEB/000?text=${encodeURIComponent('Caniggia')}` }, // Argentina
-            { name: "Redondo", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Redondo')}` }, // Real Madrid
-            { name: "Simeone", img: `https://placehold.co/150x150/CB1D24/FFF?text=${encodeURIComponent('Simeone')}` }, // Atletico
-            { name: "Veron", img: `https://placehold.co/150x150/87CEEB/000?text=${encodeURIComponent('Veron')}` }, // Argentina
-            { name: "Crespo", img: `https://placehold.co/150x150/87CEEB/000?text=${encodeURIComponent('Crespo')}` }, // Argentina
-            { name: "Tevez", img: `https://placehold.co/150x150/000080/FFFF00?text=${encodeURIComponent('Tevez')}` }, // Boca
-            // Estrelas Atuais (Cores dos Clubes/Seleções)
-            { name: "Neymar", img: `https://placehold.co/150x150/00A859/FFF?text=${encodeURIComponent('Neymar')}` }, // Al Hilal / Brasil
-            { name: "Mbappé", img: `https://placehold.co/150x150/0000FF/FFF?text=${encodeURIComponent('Mbappé')}` }, // França
-            { name: "Haaland", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('Haaland')}` }, // Man City
-            { name: "De Bruyne", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('De Bruyne')}` }, // Man City
-            { name: "Lewandowski", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Lewa')}` }, // Barcelona
-            { name: "Modric", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Modric')}` }, // Real Madrid
-            { name: "Kroos", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Kroos')}` }, // Real Madrid
-            { name: "Vini Jr.", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Vini Jr')}` }, // Real Madrid
-            { name: "Bellingham", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Bellingham')}` }, // Real Madrid
-            { name: "Salah", img: `https://placehold.co/150x150/C8102E/FFF?text=${encodeURIComponent('Salah')}` }, // Liverpool
-            { name: "Van Dijk", img: `https://placehold.co/150x150/C8102E/FFF?text=${encodeURIComponent('Van Dijk')}` }, // Liverpool
-            { name: "Kane", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Kane')}` }, // Bayern
-            { name: "Alisson", img: `https://placehold.co/150x150/C8102E/FFF?text=${encodeURIComponent('Alisson')}` }, // Liverpool
-            { name: "Ederson", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('Ederson')}` }, // Man City
-            { name: "Courtois", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Courtois')}` }, // Real Madrid
-            { name: "Neuer", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Neuer')}` }, // Bayern
-            { name: "Ter Stegen", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Ter Stegen')}` }, // Barcelona
-            { name: "Kimmich", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Kimmich')}` }, // Bayern
-            { name: "T. Müller", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('T. Müller')}` }, // Bayern
-            { name: "Griezmann", img: `https://placehold.co/150x150/CB1D24/FFF?text=${encodeURIComponent('Griezmann')}` }, // Atletico
-            { name: "Kanté", img: `https://placehold.co/150x150/0000FF/FFF?text=${encodeURIComponent('Kanté')}` }, // França
-            { name: "Pogba", img: `https://placehold.co/150x150/0000FF/FFF?text=${encodeURIComponent('Pogba')}` }, // França
-            { name: "Benzema", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Benzema')}` }, // Real (Icon)
-            { name: "Suarez", img: `https://placehold.co/150x150/56A8E0/000?text=${encodeURIComponent('Suarez')}` }, // Uruguai
-            { name: "Cavani", img: `https://placehold.co/150x150/56A8E0/000?text=${encodeURIComponent('Cavani')}` }, // Uruguai
-            { name: "Valverde", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Valverde')}` }, // Real Madrid
-            { name: "James Rodriguez", img: `https://placehold.co/150x150/FCD116/000?text=${encodeURIComponent('James')}` }, // Colombia
-            { name: "Di Maria", img: `https://placehold.co/150x150/87CEEB/000?text=${encodeURIComponent('Di Maria')}` }, // Argentina
-            { name: "Dybala", img: `https://placehold.co/150x150/8E2B2F/FFF?text=${encodeURIComponent('Dybala')}` }, // Roma
-            { name: "Lautaro", img: `https://placehold.co/150x150/0068C1/FFF?text=${encodeURIComponent('Lautaro')}` }, // Inter
-            { name: "Julián Álvarez", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('Álvarez')}` }, // Man City
-            { name: "Rodri", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('Rodri')}` }, // Man City
-            { name: "Pedri", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Pedri')}` }, // Barcelona
-            { name: "Gavi", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Gavi')}` }, // Barcelona
-            { name: "Sergio Ramos", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Ramos')}` }, // Real (Icon)
-            { name: "Piqué", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Piqué')}` }, // Barcelona
-            { name: "Busquets", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Busquets')}` }, // Barcelona
-            { name: "Jorginho", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('Jorginho')}` }, // Arsenal
-            { name: "Verratti", img: `https://placehold.co/150x150/004191/FFF?text=${encodeURIComponent('Verratti')}` }, // PSG
-            { name: "Donnarumma", img: `https://placehold.co/150x150/004191/FFF?text=${encodeURIComponent('Donnarumma')}` }, // PSG
-            { name: "Chiellini", img: `https://placehold.co/150x150/000000/FFF?text=${encodeURIComponent('Chiellini')}` }, // Juventus
-            { name: "Bonucci", img: `https://placehold.co/150x150/000000/FFF?text=${encodeURIComponent('Bonucci')}` }, // Juventus
-            { name: "Insigne", img: `https://placehold.co/150x150/12A5F0/FFF?text=${encodeURIComponent('Insigne')}` }, // Napoli
-            { name: "Immobile", img: `https://placehold.co/150x150/87D8F7/000?text=${encodeURIComponent('Immobile')}` }, // Lazio
-            { name: "Barella", img: `https://placehold.co/150x150/0068C1/FFF?text=${encodeURIComponent('Barella')}` }, // Inter
-            { name: "Bruno Fernandes", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('B. Fernandes')}` }, // Man Utd
-            { name: "Bernardo Silva", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('B. Silva')}` }, // Man City
-            { name: "Rúben Dias", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('R. Dias')}` }, // Man City
-            { name: "João Félix", img: `https://placehold.co/150x150/CB1D24/FFF?text=${encodeURIComponent('J. Félix')}` }, // Atletico
-            { name: "Pepe", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('Pepe')}` }, // Portugal
-            { name: "Casemiro", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Casemiro')}` }, // Man Utd
-            { name: "Thiago Silva", img: `https://placehold.co/150x150/034694/FFF?text=${encodeURIComponent('T. Silva')}` }, // Chelsea
-            { name: "Marquinhos", img: `https://placehold.co/150x150/004191/FFF?text=${encodeURIComponent('Marquinhos')}` }, // PSG
-            { name: "Rodrygo", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Rodrygo')}` }, // Real Madrid
-            { name: "Paquetá", img: `https://placehold.co/150x150/7A263A/FFF?text=${encodeURIComponent('Paquetá')}` }, // West Ham
-            { name: "Richarlison", img: `https://placehold.co/150x150/132257/FFF?text=${encodeURIComponent('Richarlison')}` }, // Tottenham
-            { name: "Gabriel Jesus", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('G. Jesus')}` }, // Arsenal
-            { name: "Firmino", img: `https://placehold.co/150x150/C8102E/FFF?text=${encodeURIComponent('Firmino')}` }, // Liverpool
-            { name: "Fabinho", img: `https://placehold.co/150x150/C8102E/FFF?text=${encodeURIComponent('Fabinho')}` }, // Liverpool
-            { name: "Endrick", img: `https://placehold.co/150x150/006437/FFF?text=${encodeURIComponent('Endrick')}` }, // Palmeiras
-            { name: "G. Martinelli", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('Martinelli')}` }, // Arsenal
-            { name: "Bruno Guimarães", img: `https://placehold.co/150x150/241F20/FFF?text=${encodeURIComponent('B. Guimarães')}` }, // Newcastle
-            { name: "Militão", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Militão')}` }, // Real Madrid
-            { name: "Antony", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Antony')}` }, // Man Utd
-            { name: "Raphinha", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Raphinha')}` }, // Barcelona
-            { name: "Musiala", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Musiala')}` }, // Bayern
-            { name: "Wirtz", img: `https://placehold.co/150x150/E32221/000?text=${encodeURIComponent('Wirtz')}` }, // Leverkusen
-            { name: "Gündogan", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Gündogan')}` }, // Barcelona
-            { name: "Havertz", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('Havertz')}` }, // Arsenal
-            { name: "Rüdiger", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Rüdiger')}` }, // Real Madrid
-            { name: "Sané", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Sané')}` }, // Bayern
-            { name: "Gnabry", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Gnabry')}` }, // Bayern
-            { name: "Goretzka", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Goretzka')}` }, // Bayern
-            { name: "Saka", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('Saka')}` }, // Arsenal
-            { name: "Foden", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('Foden')}` }, // Man City
-            { name: "Rice", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('Rice')}` }, // Arsenal
-            { name: "Rashford", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Rashford')}` }, // Man Utd
-            { name: "Sterling", img: `https://placehold.co/150x150/034694/FFF?text=${encodeURIComponent('Sterling')}` }, // Chelsea
-            { name: "Walker", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('Walker')}` }, // Man City
-            { name: "Trippier", img: `https://placehold.co/150x150/241F20/FFF?text=${encodeURIComponent('Trippier')}` }, // Newcastle
-            { name: "Stones", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('Stones')}` }, // Man City
-            { name: "Maguire", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Maguire')}` }, // Man Utd
-            { name: "Pickford", img: `https://placehold.co/150x150/003399/FFF?text=${encodeURIComponent('Pickford')}` }, // Everton
-            { name: "Grealish", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('Grealish')}` }, // Man City
-            { name: "Ødegaard", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('Ødegaard')}` }, // Arsenal
-            { name: "Kvaratskhelia", img: `https://placehold.co/150x150/12A5F0/FFF?text=${encodeURIComponent('Kvara')}` }, // Napoli
-            { name: "Osimhen", img: `https://placehold.co/150x150/12A5F0/FFF?text=${encodeURIComponent('Osimhen')}` }, // Napoli
-            { name: "Hakimi", img: `https://placehold.co/150x150/004191/FFF?text=${encodeURIComponent('Hakimi')}` }, // PSG
-            { name: "Ziyech", img: `https://placehold.co/150x150/C1272D/FFF?text=${encodeURIComponent('Ziyech')}` }, // Marrocos
-            { name: "Mané", img: `https://placehold.co/150x150/00853F/FFF?text=${encodeURIComponent('Mané')}` }, // Senegal
-            { name: "Koulibaly", img: `https://placehold.co/150x150/00853F/FFF?text=${encodeURIComponent('Koulibaly')}` }, // Senegal
-            { name: "Mahrez", img: `https://placehold.co/150x150/006233/FFF?text=${encodeURIComponent('Mahrez')}` }, // Algeria
-            { name: "Son", img: `https://placehold.co/150x150/132257/FFF?text=${encodeURIComponent('Son')}` }, // Tottenham
-            { name: "Kim Min-jae", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Kim')}` }, // Bayern
-            { name: "Mitoma", img: `https://placehold.co/150x150/0057B8/FFF?text=${encodeURIComponent('Mitoma')}` }, // Brighton
-            { name: "Tomiyasu", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('Tomiyasu')}` }, // Arsenal
-            { name: "Davies", img: `https://placehold.co/150x150/DC052D/FFF?text=${encodeURIComponent('Davies')}` }, // Bayern
-            { name: "David", img: `https://placehold.co/150x150/E30A17/FFF?text=${encodeURIComponent('David')}` }, // Lille
-            { name: "Pulisic", img: `https://placehold.co/150x150/AC0000/FFF?text=${encodeURIComponent('Pulisic')}` }, // Milan
-            { name: "McKennie", img: `https://placehold.co/150x150/000000/FFF?text=${encodeURIComponent('McKennie')}` }, // Juventus
-            { name: "Lozano", img: `https://placehold.co/150x150/006847/FFF?text=${encodeURIComponent('Lozano')}` }, // Mexico
-            { name: "Ochoa", img: `https://placehold.co/150x150/006847/FFF?text=${encodeURIComponent('Ochoa')}` }, // Mexico
-            { name: "Alexis Sánchez", img: `https://placehold.co/150x150/DA291C/FFF?text=${encodeURIComponent('Sánchez')}` }, // Chile
-            { name: "Vidal", img: `https://placehold.co/150x150/DA291C/FFF?text=${encodeURIComponent('Vidal')}` }, // Chile
-            { name: "Araujo", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Araujo')}` }, // Barcelona
-            { name: "Palmer", img: `https://placehold.co/150x150/034694/FFF?text=${encodeURIComponent('Palmer')}` }, // Chelsea
-            { name: "Lamine Yamal", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Yamal')}` }, // Barcelona
-            { name: "Cubarsí", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Cubarsí')}` }, // Barcelona
-            { name: "Fermín López", img: `https://placehold.co/150x150/004D98/BF0D3E?text=${encodeURIComponent('Fermín')}` }, // Barcelona
-            { name: "Güler", img: `https://placehold.co/150x150/FEBE10/00529F?text=${encodeURIComponent('Güler')}` }, // Real Madrid
-            { name: "Çalhanoglu", img: `https://placehold.co/150x150/0068C1/FFF?text=${encodeURIComponent('Çalhanoglu')}` }, // Inter
-            { name: "Reus", img: `https://placehold.co/150x150/FDE100/000?text=${encodeURIComponent('Reus')}` }, // Dortmund
-            { name: "Brandt", img: `https://placehold.co/150x150/FDE100/000?text=${encodeURIComponent('Brandt')}` }, // Dortmund
-            { name: "Hummels", img: `https://placehold.co/150x150/FDE100/000?text=${encodeURIComponent('Hummels')}` }, // Dortmund
-            { name: "Kramaric", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('Kramaric')}` }, // Croacia
-            { name: "Perisic", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('Perisic')}` }, // Croacia
-            { name: "Brozovic", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('Brozovic')}` }, // Croacia
-            { name: "Gvardiol", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('Gvardiol')}` }, // Man City
-            { name: "Livakovic", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('Livakovic')}` }, // Croacia
-            { name: "Xhaka", img: `https://placehold.co/150x150/E32221/000?text=${encodeURIComponent('Xhaka')}` }, // Leverkusen
-            { name: "Shaqiri", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('Shaqiri')}` }, // Suiça
-            { name: "Akanji", img: `https://placehold.co/150x150/6CABDD/FFF?text=${encodeURIComponent('Akanji')}` }, // Man City
-            { name: "Embolo", img: `https://placehold.co/150x150/FF0000/FFF?text=${encodeURIComponent('Embolo')}` }, // Suiça
-            { name: "Eriksen", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Eriksen')}` }, // Man Utd
-            { name: "Hojlund", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Hojlund')}` }, // Man Utd
-            { name: "Kjaer", img: `https://placehold.co/150x150/C8102E/FFF?text=${encodeURIComponent('Kjaer')}` }, // Dinamarca
-            { name: "Maehle", img: `https://placehold.co/150x150/C8102E/FFF?text=${encodeURIComponent('Maehle')}` }, // Dinamarca
-            { name: "Isak", img: `https://placehold.co/150x150/241F20/FFF?text=${encodeURIComponent('Isak')}` }, // Newcastle
-            { name: "Kulusevski", img: `https://placehold.co/150x150/132257/FFF?text=${encodeURIComponent('Kulusevski')}` }, // Tottenham
-            { name: "Lindelöf", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Lindelöf')}` }, // Man Utd
-            { name: "Forsberg", img: `https://placehold.co/150x150/006AA7/FFF?text=${encodeURIComponent('Forsberg')}` }, // Suecia
-            { name: "Aubameyang", img: `https://placehold.co/150x150/1E90FF/FFF?text=${encodeURIComponent('Aubameyang')}` }, // Marselha
-            { name: "Kessié", img: `https://placehold.co/150x150/00529F/FFF?text=${encodeURIComponent('Kessié')}` }, // C. do Marfim
-            { name: "Anguissa", img: `https://placehold.co/150x150/12A5F0/FFF?text=${encodeURIComponent('Anguissa')}` }, // Napoli
-            { name: "Onana", img: `https://placehold.co/150x150/D20000/FFF?text=${encodeURIComponent('Onana')}` }, // Man Utd
-            { name: "Partey", img: `https://placehold.co/150x150/EF0107/FFF?text=${encodeURIComponent('Partey')}` }, // Arsenal
-            { name: "Kudus", img: `https://placehold.co/150x150/7A263A/FFF?text=${encodeURIComponent('Kudus')}` }, // West Ham
-            { name: "A. Ayew", img: `https://placehold.co/150x150/000/FFF?text=${encodeURIComponent('Ayew')}` }, // Gana
-            { name: "Nico Williams", img: `https://placehold.co/150x150/C51B22/FFF?text=${encodeURIComponent('N. Williams')}` }, // Athletic
-            { name: "Iñaki Williams", img: `https://placehold.co/150x150/000/FFF?text=${encodeURIComponent('I. Williams')}` }, // Gana
-            { name: "En-Nesyri", img: `https://placehold.co/150x150/C1272D/FFF?text=${encodeURIComponent('En-Nesyri')}` }, // Marrocos
-            { name: "Bono", img: `https://placehold.co/150x150/C1272D/FFF?text=${encodeURIComponent('Bono')}` }, // Marrocos
-            { name: "Amrabat", img: `https://placehold.co/150x150/C1272D/FFF?text=${encodeURIComponent('Amrabat')}` }, // Marrocos
-            { name: "Ounahi", img: `https://placehold.co/150x150/C1272D/FFF?text=${encodeURIComponent('Ounahi')}` }, // Marrocos
+          // Exemplos com imagens reais (links de exemplo, podem quebrar)
+          { id: 1, name: 'Messi', attributes: ['Argentino', 'Atacante', 'Joga na MLS', 'Canhoto', 'Baixo'], imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Lionel_Messi_WC2022.jpg/440px-Lionel_Messi_WC2022.jpg' },
+          { id: 2, name: 'Cristiano Ronaldo', attributes: ['Português', 'Atacante', 'Joga na Arábia Saudita', 'Destro', 'Alto'], imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Cristiano_Ronaldo_playing_for_Al_Nassr_FC_against_Persepolis%2C_19_September_2023_%28cropped%29.jpg/440px-Cristiano_Ronaldo_playing_for_Al_Nassr_FC_against_Persepolis%2C_19_September_2023_%28cropped%29.jpg' },
+          { id: 3, name: 'Pelé', attributes: ['Brasileiro', 'Atacante', 'Aposentado', 'Destro', 'Baixo'], imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Pele_con_la_camiseta_de_Brasil_en_1970.jpg/440px-Pele_con_la_camiseta_de_Brasil_en_1970.jpg' },
+          
+          // Restante com placeholders
+          { id: 4, name: 'Maradona', attributes: ['Argentino', 'Meio-campista', 'Aposentado', 'Canhoto', 'Baixo'], imageUrl: 'https://placehold.co/200x200/3498db/ffffff?text=Maradona' },
+          { id: 5, name: 'Neymar', attributes: ['Brasileiro', 'Atacante', 'Joga na Arábia Saudita', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/f1c40f/000000?text=Neymar' },
+          { id: 6, name: 'Mbappé', attributes: ['Francês', 'Atacante', 'Joga na Espanha', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/34495e/ffffff?text=Mbapp%C3%A9' },
+          { id: 7, name: 'Haaland', attributes: ['Norueguês', 'Atacante', 'Joga na Inglaterra', 'Canhoto', 'Alto'], imageUrl: 'https://placehold.co/200x200/1abc9c/ffffff?text=Haaland' },
+          { id: 8, name: 'Vinícius Jr', attributes: ['Brasileiro', 'Atacante', 'Joga na Espanha', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/f1c40f/000000?text=Vini+Jr' },
+          { id: 9, name: 'Kevin De Bruyne', attributes: ['Belga', 'Meio-campista', 'Joga na Inglaterra', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/e67e22/ffffff?text=KDB' },
+          { id: 10, name: 'Zidane', attributes: ['Francês', 'Meio-campista', 'Aposentado', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/34495e/ffffff?text=Zidane' },
+          { id: 11, name: 'Ronaldo Fenômeno', attributes: ['Brasileiro', 'Atacante', 'Aposentado', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/f1c40f/000000?text=R9' },
+          { id: 12, name: 'Ronaldinho', attributes: ['Brasileiro', 'Meio-campista', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/f1c40f/000000?text=R10' },
+          { id: 13, name: 'Johan Cruyff', attributes: ['Holandês', 'Atacante', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/e67e22/ffffff?text=Cruyff' },
+          { id: 14, name: 'Beckenbauer', attributes: ['Alemão', 'Defensor', 'Aposentado', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/2c3e50/ffffff?text=Beckenbauer' },
+          { id: 15, name: 'Paolo Maldini', attributes: ['Italiano', 'Defensor', 'Aposentado', 'Canhoto', 'Alto'], imageUrl: 'https://placehold.co/200x200/3498db/ffffff?text=Maldini' },
+          { id: 16, name: 'Lev Yashin', attributes: ['Russo', 'Goleiro', 'Aposentado', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/c0392b/ffffff?text=Yashin' },
+          { id: 17, name: 'Gerd Müller', attributes: ['Alemão', 'Atacante', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/2c3e50/ffffff?text=M%C3%BCller' },
+          { id: 18, name: 'Ferenc Puskás', attributes: ['Húngaro', 'Atacante', 'Aposentado', 'Canhoto', 'Baixo'], imageUrl: 'https://placehold.co/200x200/e74c3c/ffffff?text=Pusk%C3%A1s' },
+          { id: 19, name: 'George Best', attributes: ['Norte-irlandês', 'Atacante', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/2ecc71/ffffff?text=Best' },
+          { id: 20, name: 'Eusébio', attributes: ['Português', 'Atacante', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/e74c3c/ffffff?text=Eus%C3%A9bio' },
+          { id: 21, name: 'Di Stéfano', attributes: ['Argentino', 'Atacante', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/ecf0f1/000000?text=Di+St%C3%A9fano' },
+          { id: 22, name: 'Michel Platini', attributes: ['Francês', 'Meio-campista', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/34495e/ffffff?text=Platini' },
+          { id: 23, name: 'Bobby Charlton', attributes: ['Inglês', 'Meio-campista', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/ecf0f1/000000?text=Charlton' },
+          { id: 24, name: 'Garrincha', attributes: ['Brasileiro', 'Atacante', 'Aposentado', 'Destro', 'Baixo'], imageUrl: 'https://placehold.co/200x200/f1c40f/000000?text=Garrincha' },
+          { id: 25, name: 'Zico', attributes: ['Brasileiro', 'Meio-campista', 'Aposentado', 'Destro', 'Baixo'], imageUrl: 'https://placehold.co/200x200/f1c40f/000000?text=Zico' },
+          { id: 26, name: 'Romário', attributes: ['Brasileiro', 'Atacante', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/f1c40f/000000?text=Rom%C3%A1rio' },
+          { id: 27, name: 'Van Basten', attributes: ['Holandês', 'Atacante', 'Aposentado', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/e67e22/ffffff?text=Van+Basten' },
+          { id: 28, name: 'Thierry Henry', attributes: ['Francês', 'Atacante', 'Aposentado', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/34495e/ffffff?text=Henry' },
+          { id: 29, name: 'Andrés Iniesta', attributes: ['Espanhol', 'Meio-campista', 'Ativo', 'Destro', 'Baixo'], imageUrl: 'https://placehold.co/200x200/c0392b/ffffff?text=Iniesta' },
+          { id: 30, name: 'Xavi', attributes: ['Espanhol', 'Meio-campista', 'Aposentado', 'Destro', 'Baixo'], imageUrl: 'https://placehold.co/200x200/c0392b/ffffff?text=Xavi' },
+          { id: 31, name: 'Bellingham', attributes: ['Inglês', 'Meio-campista', 'Joga na Espanha', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/ecf0f1/000000?text=Bellingham' },
+          { id: 32, name: 'Modric', attributes: ['Croata', 'Meio-campista', 'Joga na Espanha', 'Destro', 'Baixo'], imageUrl: 'https://placehold.co/200x200/ecf0f1/000000?text=Modric' },
+          { id: 33, name: 'Salah', attributes: ['Egípcio', 'Atacante', 'Joga na Inglaterra', 'Canhoto', 'Médio'], imageUrl: 'https://placehold.co/200x200/e74c3c/ffffff?text=Salah' },
+          { id: 34, name: 'Buffon', attributes: ['Italiano', 'Goleiro', 'Aposentado', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/3498db/ffffff?text=Buffon' },
+          { id: 35, name: 'Neuer', attributes: ['Alemão', 'Goleiro', 'Joga na Alemanha', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/2c3e50/ffffff?text=Neuer' },
+          { id: 36, name: 'Kahn', attributes: ['Alemão', 'Goleiro', 'Aposentado', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/2c3e50/ffffff?text=Kahn' },
+          { id: 37, name: 'Cafu', attributes: ['Brasileiro', 'Defensor', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/f1c40f/000000?text=Cafu' },
+          { id: 38, name: 'Roberto Carlos', attributes: ['Brasileiro', 'Defensor', 'Aposentado', 'Canhoto', 'Médio'], imageUrl: 'https://placehold.co/200x200/f1c40f/000000?text=R.+Carlos' },
+          { id: 39, name: 'Puyol', attributes: ['Espanhol', 'Defensor', 'Aposentado', 'Destro', 'Médio'], imageUrl: 'https://placehold.co/200x200/c0392b/ffffff?text=Puyol' },
+          { id: 40, name: 'Sergio Ramos', attributes: ['Espanhol', 'Defensor', 'Joga na Espanha', 'Destro', 'Alto'], imageUrl: 'https://placehold.co/200x200/c0392b/ffffff?text=S.+Ramos' },
+          // ... (Continuar a preencher até 300)
         ];
 
+        // --- Funções Auxiliares ---
 
-        // --- LÓGICA DO JOGO (Exatamente como a V2) ---
-
-        const generateBoardBtn = document.getElementById('generate-board');
-        const drawSecretPlayerBtn = document.getElementById('draw-secret-player');
-        const seedInput = document.getElementById('seed');
-        const gameBoard = document.getElementById('game-board');
-        const initialMessage = document.getElementById('initial-message');
-        const secretPlayerPanel = document.getElementById('secret-player-panel');
-        const secretNameEl = document.getElementById('secret-name');
-        const secretImgEl = document.getElementById('secret-img');
-
-        let currentBoardPlayers = []; // Armazena os 25 jogadores do tabuleiro atual
-
-        // Função para embaralhar um array usando um "seed" (algoritmo de Fisher-Yates)
-        function seededShuffle(array, seed) {
-            let m = array.length, t, i;
-            let a = 1103515245, c = 12345, m_prime = 2147483647;
-            let pseudoRandom = (s) => (s * a + c) % m_prime / (m_prime - 1);
-            let random = pseudoRandom(sdbm(seed));
-            
-            while (m) {
-                i = Math.floor(random * m--);
-                if (m === i) random = pseudoRandom(random * m_prime);
-                t = array[m];
-                array[m] = array[i];
-                array[i] = t;
-            }
-            return array;
+        function shuffleArray(array) {
+          let currentIndex = array.length,  randomIndex;
+          while (currentIndex !== 0) {
+            randomIndex = Math.floor(Math.random() * currentIndex);
+            currentIndex--;
+            [array[currentIndex], array[randomIndex]] = [
+              array[randomIndex], array[currentIndex]];
+          }
+          return array;
         }
 
-        // Função de hash simples para transformar o seed-texto em número
-        function sdbm(str) {
-            let hash = 0;
-            for (let i = 0; i < str.length; i++) {
-                hash = str.charCodeAt(i) + (hash << 6) + (hash << 16) - hash;
-            }
-            return Math.abs(hash);
+        function generateGameId() {
+          return Math.random().toString(36).substring(2, 7).toUpperCase();
         }
 
-        // Função principal para gerar o tabuleiro
-        function generateBoard() {
-            initialMessage.style.display = 'none'; // Esconde a mensagem inicial
-            gameBoard.innerHTML = ''; // Limpa o tabuleiro anterior
-            
-            let seed = seedInput.value.trim().toLowerCase(); // Normaliza o seed
-            if (seed === "") {
-                seed = Math.random().toString();
+        // --- Caminhos do Firestore ---
+        const getGamesCollectionRef = (db) => collection(db, 'artifacts', appId, 'public', 'data', 'quem-e-o-craque-v5-games');
+        const getGameDocRef = (db, gameId) => doc(db, 'artifacts', appId, 'public', 'data', 'quem-e-o-craque-v5-games', gameId);
+        const getLobbyCollectionRef = (db, gameId) => collection(db, 'artifacts', appId, 'public', 'data', 'quem-e-o-craque-v5-games', gameId, 'lobby');
+        const getPlayerDocRef = (db, gameId, userId) => doc(db, 'artifacts', appId, 'public', 'data', 'quem-e-o-craque-v5-games', gameId, 'lobby', userId);
+
+        // --- Componente Principal ---
+
+        function App() {
+          const [auth, setAuth] = useState(null);
+          const [db, setDb] = useState(null);
+          const [userId, setUserId] = useState(null);
+          const [isAuthReady, setIsAuthReady] = useState(false);
+          
+          const [gameId, setGameId] = useState(null);
+          const [gameData, setGameData] = useState(null);
+          const [playersInLobby, setPlayersInLobby] = useState([]);
+          
+          const [loading, setLoading] = useState(false);
+          const [error, setError] = useState(null);
+          const [gameIdInput, setGameIdInput] = useState('');
+
+          const [eliminatedCards, setEliminatedCards] = useState({});
+          const [guessModalOpen, setGuessModalOpen] = useState(false);
+
+          // Efeito para inicializar o Firebase e autenticar
+          useEffect(() => {
+            if (!authGlobal || !dbGlobal) {
+                setError("Falha ao carregar a configuração do Firebase.");
+                return;
             }
+              
+            setDb(dbGlobal);
+            setAuth(authGlobal);
 
-            // Cria uma cópia da lista de jogadores e a embaralha
-            const shuffledPlayers = seededShuffle([...allPlayers], seed);
-
-            // Pega os primeiros 25 jogadores
-            currentBoardPlayers = shuffledPlayers.slice(0, 25);
-
-            // Cria os cards no HTML
-            currentBoardPlayers.forEach(player => {
-                const card = document.createElement('div');
-                card.className = 'card bg-white rounded-lg shadow-md overflow-hidden flex flex-col items-center p-3';
-                card.innerHTML = `
-                    <img src="${player.img}" alt="${player.name}" class="w-20 h-20 md:w-24 md:h-24 object-cover rounded-md mb-2 shadow-inner">
-                    <span class="text-sm md:text-base font-bold text-center text-gray-800">${player.name}</span>
-                `;
-                
-                // Adiciona a lógica de clique para eliminar
-                card.addEventListener('click', () => {
-                    card.classList.toggle('eliminated');
-                });
-
-                gameBoard.appendChild(card);
+            const unsubscribe = onAuthStateChanged(authGlobal, async (user) => {
+              if (user) {
+                setUserId(user.uid);
+                setIsAuthReady(true);
+                console.log("Utilizador autenticado:", user.uid);
+              } else {
+                try {
+                  console.log("Nenhum utilizador, a tentar autenticação...");
+                  if (initialAuthToken) {
+                    console.log("A usar token inicial.");
+                    await signInWithCustomToken(authGlobal, initialAuthToken);
+                  } else {
+                    console.log("A usar autenticação anónima.");
+                    await signInAnonymously(authGlobal);
+                  }
+                } catch (err) {
+                  console.error("Erro na autenticação:", err);
+                  setError("Erro ao ligar. Por favor, atualize a página.");
+                }
+              }
             });
 
-            // Sorteia o jogador secreto automaticamente
-            drawSecretPlayer();
-            secretPlayerPanel.style.display = 'block'; // Mostra o painel
+            return () => unsubscribe();
+          }, []);
+
+          // Efeito para "ouvir" os dados do jogo (documento principal)
+          useEffect(() => {
+            if (!isAuthReady || !db || !gameId) {
+              setGameData(null);
+              return;
+            }
+
+            console.log(`A ouvir o documento do jogo: ${gameId}`);
+            const gameDocRef = getGameDocRef(db, gameId);
+            
+            const unsubscribe = onSnapshot(gameDocRef, (docSnap) => {
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                setGameData(data);
+                console.log("Dados do jogo atualizados:", data);
+                if (data.status === 'playing') {
+                  setEliminatedCards({});
+                }
+              } else {
+                console.warn(`O jogo ${gameId} não foi encontrado.`);
+                setError(`Sala ${gameId} não encontrada. Foi eliminada?`);
+                setGameId(null);
+                setGameData(null);
+              }
+            }, (err) => {
+              console.error("Erro ao ouvir o jogo:", err);
+              setError("Erro de ligação com a sala.");
+            });
+
+            return () => unsubscribe();
+          }, [isAuthReady, db, gameId]);
+
+          // Efeito para "ouvir" quem está no lobby (subcoleção 'lobby')
+          useEffect(() => {
+            if (!isAuthReady || !db || !gameId) {
+              setPlayersInLobby([]);
+              return;
+            }
+
+            console.log(`A ouvir o lobby da sala: ${gameId}`);
+            const lobbyColRef = getLobbyCollectionRef(db, gameId);
+            
+            const unsubscribe = onSnapshot(query(lobbyColRef), (querySnapshot) => {
+              const players = [];
+              querySnapshot.forEach((doc) => {
+                players.push({ id: doc.id, ...doc.data() });
+              });
+              setPlayersInLobby(players);
+              console.log("Jogadores no lobby atualizados:", players);
+            }, (err) => {
+              console.error("Erro ao ouvir o lobby:", err);
+              setError("Erro ao carregar os jogadores na sala.");
+            });
+
+            return () => unsubscribe();
+          }, [isAuthReady, db, gameId]);
+
+          // --- Funções de Gestão do Jogo ---
+
+          const handleCreateGame = useCallback(async () => {
+            if (!isAuthReady || !db || !userId) return;
+
+            setLoading(true);
+            setError(null);
+            const newGameId = generateGameId();
+            console.log(`A criar jogo: ${newGameId}`);
+            
+            try {
+              const gameDocRef = getGameDocRef(db, newGameId);
+              const playerDocRef = getPlayerDocRef(db, newGameId, userId);
+              const batch = writeBatch(db);
+
+              batch.set(gameDocRef, {
+                hostId: userId,
+                status: 'lobby',
+                createdAt: serverTimestamp(),
+                board: [],
+                secretPlayers: {},
+                winners: []
+              });
+
+              batch.set(playerDocRef, {
+                joinedAt: serverTimestamp(),
+                isHost: true
+              });
+
+              await batch.commit();
+              setGameId(newGameId);
+              console.log(`Jogo ${newGameId} criado.`);
+            } catch (err) {
+              console.error("Erro ao criar jogo:", err);
+              setError("Não foi possível criar o jogo. Tente novamente.");
+            } finally {
+              setLoading(false);
+            }
+          }, [isAuthReady, db, userId]);
+
+          const handleJoinGame = useCallback(async (idToJoin) => {
+            if (!isAuthReady || !db || !userId || !idToJoin) return;
+
+            setLoading(true);
+            setError(null);
+            const normalizedId = idToJoin.toUpperCase();
+            console.log(`A tentar entrar no jogo: ${normalizedId}`);
+            
+            try {
+              const gameDocRef = getGameDocRef(db, normalizedId);
+              const gameSnap = await getDoc(gameDocRef);
+
+              if (!gameSnap.exists()) throw new Error("Sala não encontrada.");
+              if (gameSnap.data().status !== 'lobby') throw new Error("Este jogo já começou ou terminou.");
+
+              const playerDocRef = getPlayerDocRef(db, normalizedId, userId);
+              await setDoc(playerDocRef, {
+                joinedAt: serverTimestamp(),
+                isHost: false
+              });
+
+              setGameId(normalizedId);
+              console.log(`Entrou no jogo ${normalizedId}.`);
+            } catch (err) {
+              console.error("Erro ao entrar no jogo:", err);
+              setError(err.message || "Não foi possível entrar no jogo. Verifique o ID.");
+            } finally {
+              setLoading(false);
+            }
+          }, [isAuthReady, db, userId]);
+
+          const handleStartGame = useCallback(async () => {
+            if (!gameId || !db || !userId || playersInLobby.length === 0 || gameData?.hostId !== userId) {
+              if (gameData?.hostId !== userId) setError("Apenas o anfitrião pode começar o jogo.");
+              return;
+            }
+
+            setLoading(true);
+            setError(null);
+            console.log(`A começar o jogo ${gameId}...`);
+
+            try {
+              const shuffledAllPlayers = shuffleArray([...allPlayers]);
+              const gameBoard = shuffledAllPlayers.slice(0, 25);
+              const shuffledBoard = shuffleArray([...gameBoard]);
+              const secretPlayersMap = {};
+              
+              playersInLobby.forEach((player, index) => {
+                const secretPlayer = shuffledBoard[index % shuffledBoard.length];
+                secretPlayersMap[player.id] = secretPlayer.id;
+              });
+
+              const gameDocRef = getGameDocRef(db, gameId);
+              await updateDoc(gameDocRef, {
+                status: 'playing',
+                board: gameBoard,
+                secretPlayers: secretPlayersMap,
+                winners: []
+              });
+              
+              console.log("Jogo iniciado com sucesso.");
+            } catch (err) {
+              console.error("Erro ao começar o jogo:", err);
+              setError("Não foi possível começar o jogo.");
+            } finally {
+              setLoading(false);
+            }
+          }, [gameId, db, userId, playersInLobby, gameData]);
+
+          const handleLeaveGame = useCallback(async () => {
+            if (!gameId || !db || !userId) return;
+            console.log(`A sair do jogo ${gameId}...`);
+            
+            try {
+              const playerDocRef = getPlayerDocRef(db, gameId, userId);
+              await deleteDoc(playerDocRef);
+
+              if (gameData?.hostId === userId && playersInLobby.length > 1) {
+                  const newHost = playersInLobby.find(p => p.id !== userId);
+                  if (newHost) {
+                      const gameDocRef = getGameDocRef(db, gameId);
+                      await updateDoc(gameDocRef, { hostId: newHost.id });
+                      const newHostPlayerDocRef = getPlayerDocRef(db, gameId, newHost.id);
+                      await updateDoc(newHostPlayerDocRef, { isHost: true });
+                      console.log(`Novo anfitrião eleito: ${newHost.id}`);
+                  }
+              } else if (playersInLobby.length <= 1) {
+                  console.log("Último jogador saiu. A apagar o jogo.");
+                  const gameDocRef = getGameDocRef(db, gameId);
+                  await deleteDoc(gameDocRef);
+              }
+
+              setGameId(null);
+              setGameData(null);
+              setPlayersInLobby([]);
+              setError(null);
+            } catch (err) {
+              console.error("Erro ao sair do jogo:", err);
+              setError("Não foi possível sair do jogo.");
+            }
+          }, [gameId, db, userId, gameData, playersInLobby]);
+
+          const handleToggleCard = (playerId) => {
+            setEliminatedCards(prev => ({ ...prev, [playerId]: !prev[playerId] }));
+          };
+
+          const handleGuess = useCallback(async (guessedPlayerId) => {
+            if (!gameData || !userId || !db || !gameId) return;
+
+            const mySecretPlayerId = gameData.secretPlayers[userId];
+            
+            if (guessedPlayerId === mySecretPlayerId) {
+              console.log("Palpite correto!");
+              const gameDocRef = getGameDocRef(db, gameId);
+              await updateDoc(gameDocRef, { winners: arrayUnion(userId) });
+              
+              if (gameData.winners.length + 1 === playersInLobby.length) {
+                await updateDoc(gameDocRef, { status: 'finished' });
+              }
+            } else {
+              console.log("Palpite incorreto.");
+            }
+            setGuessModalOpen(false);
+          }, [gameData, userId, db, gameId, playersInLobby]);
+
+          // --- Renderização ---
+          const mySecretPlayerId = useMemo(() => gameData?.secretPlayers?.[userId], [gameData, userId]);
+          const amIWinner = useMemo(() => gameData?.winners.includes(userId), [gameData, userId]);
+          const amIHost = useMemo(() => gameData?.hostId === userId, [gameData, userId]);
+
+          // Renderiza o Ecrã de Entrada (Lobby Principal)
+          const renderLobby = () => (
+            React.createElement('div', { className: "w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-xl" },
+              React.createElement('h2', { className: "text-3xl font-bold text-center text-gray-800" }, "Quem é o Craque?"),
+              React.createElement('p', { className: "text-center text-gray-600" }, "Crie uma sala ou junte-se a uma existente para jogar com os seus amigos!"),
+              error && React.createElement('div', { className: "p-3 text-center text-red-800 bg-red-100 rounded-md" }, error),
+              React.createElement('button', {
+                onClick: handleCreateGame,
+                disabled: loading,
+                className: "w-full px-4 py-3 font-semibold text-white transition duration-300 transform bg-green-600 rounded-md shadow-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-gray-400 hover:scale-105"
+              }, loading ? 'A criar...' : 'Criar Novo Jogo'),
+              React.createElement('div', { className: "flex items-center justify-center space-x-2" },
+                React.createElement('hr', { className: "w-full border-gray-300" }),
+                React.createElement('span', { className: "font-medium text-gray-500" }, "OU"),
+                React.createElement('hr', { className: "w-full border-gray-300" })
+              ),
+              React.createElement('div', { className: "space-y-3" },
+                React.createElement('input', {
+                  type: "text",
+                  value: gameIdInput,
+                  onChange: (e) => setGameIdInput(e.target.value.toUpperCase()),
+                  maxLength: "5",
+                  placeholder: "Código da Sala (Ex: ABC12)",
+                  className: "w-full px-4 py-3 text-center uppercase border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                }),
+                React.createElement('button', {
+                  onClick: () => handleJoinGame(gameIdInput),
+                  disabled: loading || gameIdInput.length < 5,
+                  className: "w-full px-4 py-3 font-semibold text-white transition duration-300 transform bg-blue-600 rounded-md shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400 hover:scale-105"
+                }, loading ? 'A entrar...' : 'Entrar no Jogo')
+              ),
+              React.createElement('p', { className: "text-xs text-center text-gray-500" }, `O seu ID de Jogador: ${userId}`)
+            )
+          );
+
+          // Renderiza o Jogo (Lobby da Sala ou Jogo a Decorrer)
+          const renderGame = () => {
+            if (!gameData) {
+              return React.createElement('div', { className: "text-white" },
+                React.createElement('p', null, "A carregar dados da sala..."),
+                error && React.createElement('div', { className: "p-3 text-center text-red-800 bg-red-100 rounded-md" }, error),
+                React.createElement('button', { onClick: handleLeaveGame, className: "px-4 py-2 mt-4 font-semibold text-white bg-red-600 rounded-md hover:bg-red-700" }, "Sair")
+              );
+            }
+            
+            if (gameData.status === 'lobby') {
+              return React.createElement('div', { className: "w-full max-w-lg p-8 space-y-6 bg-white rounded-lg shadow-xl" },
+                React.createElement('h2', { className: "text-2xl font-bold text-center text-gray-800" }, "Sala de Jogo: ", React.createElement('span', { className: "font-mono text-blue-600" }, gameId)),
+                React.createElement('p', { className: "text-center text-gray-600" }, "A aguardar jogadores... Partilhe o código com os seus amigos!"),
+                React.createElement('div', { className: "p-4 border border-gray-200 rounded-md" },
+                  React.createElement('h3', { className: "mb-2 font-semibold text-gray-700" }, `Jogadores na Sala (${playersInLobby.length}):`),
+                  React.createElement('ul', { className: "space-y-1" },
+                    playersInLobby.map(player => (
+                      React.createElement('li', { key: player.id, className: "flex items-center justify-between p-2 bg-gray-50 rounded-md" },
+                        React.createElement('span', { className: "truncate" },
+                          `${player.id.substring(0, 8)}...`,
+                          player.id === userId && React.createElement('span', { className: "font-semibold text-blue-600" }, " (Você)"),
+                          player.isHost && React.createElement('span', { className: "ml-2 text-xs font-bold text-yellow-600" }, "[Anfitrião]")
+                        )
+                      )
+                    ))
+                  )
+                ),
+                error && React.createElement('div', { className: "p-3 text-center text-red-800 bg-red-100 rounded-md" }, error),
+                React.createElement('button', {
+                  onClick: handleStartGame,
+                  disabled: loading || playersInLobby.length < 2 || !amIHost,
+                  className: "w-full px-4 py-3 font-bold text-white transition duration-300 transform bg-green-600 rounded-md shadow-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed hover:scale-105"
+                }, loading ? 'A começar...' : 'Começar Jogo!'),
+                !amIHost && React.createElement('p', { className: "text-xs text-center text-gray-500" }, "Apenas o anfitrião pode começar o jogo."),
+                playersInLobby.length < 2 && React.createElement('p', { className: "text-xs text-center text-gray-500" }, "É necessário pelo menos 2 jogadores para começar."),
+                React.createElement('button', { onClick: handleLeaveGame, className: "w-full px-4 py-2 mt-4 font-semibold text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300" }, "Sair da Sala")
+              );
+            }
+            
+            if (gameData.status === 'playing' || gameData.status === 'finished') {
+              const mySecretPlayer = allPlayers.find(p => p.id === mySecretPlayerId);
+              const otherPlayersSecrets = Object.entries(gameData.secretPlayers)
+                .filter(([pUserId, _]) => pUserId !== userId)
+                .map(([pUserId, pPlayerId]) => {
+                    const playerDetails = allPlayers.find(p => p.id === pPlayerId);
+                    return {
+                        userId: pUserId,
+                        playerName: playerDetails ? playerDetails.name : 'Desconhecido',
+                        imageUrl: playerDetails ? playerDetails.imageUrl : 'https://placehold.co/100x100'
+                    };
+                });
+
+              return React.createElement('div', { className: "w-full max-w-6xl p-6 mx-auto" },
+                gameData.status === 'finished' && React.createElement('div', { className: "p-4 mb-6 text-2xl font-bold text-center text-green-800 bg-green-100 rounded-lg shadow-lg" }, "FIM DE JOGO!"),
+                React.createElement('div', { className: "grid grid-cols-1 gap-6 mb-6 md:grid-cols-3" },
+                  React.createElement('div', { className: "p-4 bg-white rounded-lg shadow-lg" },
+                    React.createElement('h3', { className: "mb-2 text-lg font-bold text-center text-gray-800" }, "O SEU OBJETIVO"),
+                    amIWinner ? (
+                      React.createElement('div', { className: "text-center" },
+                        React.createElement('img', { 
+                          src: mySecretPlayer.imageUrl, 
+                          alt: mySecretPlayer.name, 
+                          className: "object-cover w-32 h-32 mx-auto mb-2 border-4 border-green-500 rounded-full shadow-md",
+                          onError: (e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x200/cccccc/999999?text=Erro'; }
+                        }),
+                        React.createElement('p', { className: "text-xl font-bold text-green-600" }, "VOCÊ ADIVINHOU!"),
+                        React.createElement('p', { className: "text-lg font-semibold" }, mySecretPlayer.name)
+                      )
+                    ) : (
+                      React.createElement('div', { className: "p-6 text-center bg-gray-800 rounded-lg" },
+                        React.createElement('span', { className: "text-6xl font-bold text-white" }, "?"),
+                        React.createElement('p', { className: "mt-2 font-semibold text-white" }, "O seu jogador é ???"),
+                        React.createElement('p', { className: "text-sm text-gray-300" }, "(Pergunte aos seus amigos!)")
+                      )
+                    )
+                  ),
+                  React.createElement('div', { className: "p-4 bg-white rounded-lg shadow-lg md:col-span-2" },
+                    React.createElement('h3', { className: "mb-2 text-lg font-bold text-center text-gray-800" }, "QUEM OS SEUS AMIGOS SÃO:"),
+                    React.createElement('div', { className: "flex flex-wrap items-start justify-center gap-4" },
+                      otherPlayersSecrets.length === 0 ? (
+                          React.createElement('p', { className: "text-gray-500" }, "A aguardar outros jogadores...")
+                      ) : (
+                          otherPlayersSecrets.map(p => (
+                              React.createElement('div', { key: p.userId, className: "p-2 text-center bg-gray-50 rounded-md shadow-sm w-36" },
+                                React.createElement('img', { 
+                                  src: p.imageUrl, 
+                                  alt: p.playerName, 
+                                  className: "object-cover w-20 h-20 mx-auto mb-1 rounded-full shadow-md",
+                                  onError: (e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x200/cccccc/999999?text=Erro'; }
+                                }),
+                                React.createElement('p', { className: "text-sm font-semibold text-gray-700 truncate" }, p.playerName),
+                                React.createElement('p', { className: "text-xs text-gray-500 truncate" }, `${p.userId.substring(0, 8)}...`)
+                              )
+                          ))
+                      )
+                    )
+                  )
+                ),
+                gameData.winners && gameData.winners.length > 0 && (
+                    React.createElement('div', { className: "p-4 mb-6 bg-yellow-100 rounded-lg shadow-md" },
+                        React.createElement('h3', { className: "mb-2 text-lg font-bold text-center text-yellow-800" }, "🏆 Vencedores 🏆"),
+                        React.createElement('div', { className: "flex flex-wrap justify-center gap-4" },
+                            gameData.winners.map(winnerId => (
+                                React.createElement('span', { key: winnerId, className: "px-3 py-1 font-semibold text-green-800 bg-green-200 rounded-full shadow-sm" },
+                                    `${winnerId.substring(0, 8)}... ${winnerId === userId ? "(Você)" : ""}`
+                                )
+                            ))
+                        )
+                    )
+                ),
+                React.createElement('div', { className: "grid grid-cols-5 gap-2 md:gap-4 p-4 bg-gray-900 rounded-lg shadow-inner" },
+                  gameData.board.map(player => (
+                    React.createElement(GameCard, {
+                      key: player.id,
+                      player: player,
+                      isEliminated: !!eliminatedCards[player.id],
+                      onClick: () => handleToggleCard(player.id)
+                    })
+                  ))
+                ),
+                React.createElement('div', { className: "flex flex-col gap-4 mt-6 md:flex-row" },
+                  React.createElement('button', {
+                    onClick: () => setGuessModalOpen(true),
+                    disabled: amIWinner || gameData.status === 'finished',
+                    className: "flex-1 px-6 py-4 text-xl font-bold text-white transition duration-300 transform bg-green-600 rounded-md shadow-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed hover:scale-105"
+                  }, amIWinner ? "Você Já Venceu!" : "Dar Palpite!"),
+                  React.createElement('button', { 
+                      onClick: handleLeaveGame, 
+                      className: "flex-1 px-6 py-4 font-semibold text-gray-700 bg-gray-200 rounded-md shadow-lg hover:bg-gray-300"
+                  }, "Sair do Jogo")
+                ),
+                guessModalOpen && React.createElement(GuessModal, {
+                  board: gameData.board,
+                  onClose: () => setGuessModalOpen(false),
+                  onGuess: handleGuess
+                })
+              );
+            }
+            return React.createElement('div', { className: "text-white" }, `Estado de jogo desconhecido: ${gameData.status}`);
+          };
+
+          // --- Renderização Principal ---
+          if (!isAuthReady || !db || !auth) {
+            return React.createElement('div', { className: "flex items-center justify-center min-h-screen bg-gray-900" },
+              React.createElement('div', { className: "text-2xl font-semibold text-white" }, error || "A ligar ao servidor...")
+            );
+          }
+
+          return React.createElement('div', { className: "flex items-center justify-center min-h-screen p-4 bg-gradient-to-b from-green-800 to-green-900 font-sans" },
+            !gameId ? renderLobby() : renderGame()
+          );
         }
 
-        // Função para sortear o jogador secreto (dos 25 do tabuleiro)
-        function drawSecretPlayer() {
-            if (currentBoardPlayers.length === 0) return;
-
-            // Sorteio LOCAL, não usa o seed.
-            const randomIndex = Math.floor(Math.random() * currentBoardPlayers.length);
-            const secretPlayer = currentBoardPlayers[randomIndex];
-
-            secretNameEl.textContent = secretPlayer.name;
-            secretImgEl.src = secretPlayer.img;
-            secretImgEl.alt = secretPlayer.name;
+        // --- Componentes Filhos ---
+        function GameCard({ player, isEliminated, onClick }) {
+          return React.createElement('button', {
+            onClick: onClick,
+            className: `relative w-full overflow-hidden transition-all duration-300 transform border-2 border-gray-700 rounded-lg shadow-lg aspect-square group ${isEliminated ? 'opacity-20 scale-95' : 'hover:scale-105 hover:shadow-xl'}`
+          },
+            React.createElement('img', {
+              src: player.imageUrl,
+              alt: player.name,
+              className: "object-cover w-full h-full",
+              onError: (e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x200/cccccc/999999?text=Erro'; }
+            }),
+            React.createElement('div', { className: `absolute bottom-0 left-0 right-0 p-2 text-center text-white transition-opacity duration-300 bg-black bg-opacity-70 ${isEliminated ? 'opacity-0' : 'opacity-100'}` },
+              React.createElement('p', { className: "text-xs font-bold truncate md:text-sm" }, player.name)
+            ),
+            isEliminated && React.createElement('div', { className: "absolute inset-0 flex items-center justify-center" },
+              React.createElement('span', { className: "text-8xl font-black text-red-600 opacity-80", style: { textShadow: '0 0 10px rgba(0,0,0,0.7)' } }, "X")
+            )
+          );
         }
 
-        // Adiciona os eventos aos botões
-        generateBoardBtn.addEventListener('click', generateBoard);
-        drawSecretPlayerBtn.addEventListener('click', drawSecretPlayer);
+        function GuessModal({ board, onClose, onGuess }) {
+          return React.createElement('div', { className: "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-75" },
+            React.createElement('div', { className: "w-full max-w-4xl p-6 bg-white rounded-lg shadow-xl max-h-[90vh] overflow-y-auto" },
+              React.createElement('div', { className: "flex items-center justify-between mb-4" },
+                React.createElement('h2', { className: "text-2xl font-bold text-gray-800" }, "Qual é o seu jogador secreto?"),
+                React.createElement('button', { onClick: onClose, className: "text-2xl font-bold text-gray-500 hover:text-gray-800" }, "×")
+              ),
+              React.createElement('p', { className: "mb-6 text-gray-600" }, "Clique no jogador que você acha que é."),
+              React.createElement('div', { className: "grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5" },
+                board.map(player => (
+                  React.createElement('button', {
+                    key: player.id,
+                    onClick: () => onGuess(player.id),
+                    className: "relative w-full overflow-hidden transition-all duration-200 transform border-2 border-transparent rounded-lg shadow-md aspect-square group hover:scale-105 hover:shadow-lg hover:border-blue-500"
+                  },
+                    React.createElement('img', {
+                      src: player.imageUrl,
+                      alt: player.name,
+                      className: "object-cover w-full h-full",
+                      onError: (e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x200/cccccc/999999?text=Erro'; }
+                    }),
+                    React.createElement('div', { className: "absolute bottom-0 left-0 right-0 p-2 text-xs font-bold text-center text-white truncate transition-opacity duration-300 bg-black bg-opacity-70 group-hover:bg-blue-600" },
+                      player.name
+                    )
+                  )
+                ))
+              ),
+              React.createElement('button', {
+                onClick: onClose,
+                className: "w-full px-4 py-2 mt-8 font-semibold text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+              }, "Cancelar")
+            )
+          );
+
+        }
+
+        // --- Monta a aplicação React ---
+        const rootElement = document.getElementById('root');
+        const root = ReactDOM.createRoot(rootElement);
+        root.render(React.createElement(App));
 
     </script>
 </body>
