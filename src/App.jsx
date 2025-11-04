@@ -18,29 +18,88 @@ import {
   addDoc
 } from 'firebase/firestore';
 
-// A base de dados agora é importada do seu próprio ficheiro!
-import { allPlayers } from './database.js';
+// A base de dados (allPlayers) foi movida para aqui para corrigir erros de importação no Vercel/Vite.
+const allPlayers = [
+  {
+    name: "Messi",
+    img: "https_://placehold.co/150x150/87CEEB/FFFFFF?text=Messi",
+    color: "#87CEEB", // Cor da Argentina
+    textColor: "#FFFFFF"
+  },
+  {
+    name: "C. Ronaldo",
+    img: "https_://placehold.co/150x150/FF0000/FFFFFF?text=CR7",
+    color: "#D2232A", // Cor de Portugal
+    textColor: "#FFFFFF"
+  },
+  {
+    name: "Pelé",
+    img: "https_://placehold.co/150x150/FFFF00/000000?text=Pel%C3%A9",
+    color: "#FFDF00", // Cor do Brasil
+    textColor: "#008026"
+  },
+  {
+    name: "Maradona",
+    img: "https_://placehold.co/150x150/87CEEB/FFFFFF?text=Maradona",
+    color: "#87CEEB", // Cor da Argentina
+    textColor: "#FFFFFF"
+  },
+  {
+    name: "Mbappé",
+    img: "https_://placehold.co/150x150/0000FF/FFFFFF?text=Mbapp%C3%A9",
+    color: "#0055A4", // Cor da França
+    textColor: "#FFFFFF"
+  },
+  {
+    name: "Haaland",
+    img: "https://placehold.co/150x150/ADD8E6/000000?text=Haaland",
+    color: "#99D9EA", // Cor do Man City
+    textColor: "#000000"
+  },
+  {
+    name: "Neymar",
+    img: "https_://placehold.co/150x150/008000/FFFFFF?text=Neymar",
+    color: "#009B3A", // Cor do Brasil (alternativa)
+    textColor: "#FFFFFF"
+  },
+  {
+    name: "Zidane",
+    img: "https_://placehold.co/150x150/0000FF/FFFFFF?text=Zidane",
+    color: "#0055A4", // Cor da França
+    textColor: "#FFFFFF"
+  },
+  {
+    name: "Ronaldinho",
+    img: "https_://placehold.co/150x150/FFFFE0/000000?text=Ronaldinho",
+    color: "#A50044", // Cor do Barcelona (alternativa)
+    textColor: "#FFFFFF"
+  },
+  {
+    name: "Vini. Jr",
+    img: "https_://placehold.co/150x150/FFFFFF/000000?text=Vini+Jr",
+    color: "#FEBE10", // Cor do Real Madrid
+    textColor: "#000000"
+  }
+];
 
 
 // --- 2. CONFIGURAÇÃO DO FIREBASE ---
 
-// PASSO CRUCIAL: COLE A SUA CONFIGURAÇÃO DO FIREBASE AQUI!
+// PASSO CRUCIAL: As suas chaves do Firebase ficam aqui
 const firebaseConfig = {
-  apiKey: "AIzaSyDXuNhUFz4z6x-SoI8jmlj9yuOhnNfRI1o",
-  authDomain: "jogoquemeocraque.firebaseapp.com",
-  projectId: "jogoquemeocraque",
-  storageBucket: "jogoquemeocraque.firebasestorage.app",
+  apiKey: "AIzaSyDXuNhUFz4z6x-SoI8jm1j9yuOhnNFRl1o",
+  authDomain: "jogoquemecraque.firebaseapp.com",
+  projectId: "jogoquemecraque",
+  storageBucket: "jogoquemecraque.firebasestorage.app",
   messagingSenderId: "703914878271",
   appId: "1:703914878271:web:7b16fc1d02e6ac46acdf8a",
-  measurementId: "G-B339KXCEC1"
+  measurementId: "G-B339KXCZEC1"
 };
 
 // --- 3. INICIALIZAÇÃO DA APLICAÇÃO ---
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// Definimos um ID fixo para o nosso app
-const appId = 'quemeocraque-v1'; 
 
 // --- 4. O COMPONENTE PRINCIPAL (APP) ---
 
@@ -53,7 +112,7 @@ export default function App() {
   useEffect(() => {
     signInAnonymously(auth).catch(err => {
       console.error("Erro ao autenticar anonimamente:", err);
-      setError("Não foi possível ligar ao servidor. Verifique as suas chaves do Firebase.");
+      setError("Não foi possível ligar ao servidor. Verifique as suas chaves do Firebase e as regras de segurança.");
     });
 
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -109,7 +168,8 @@ function GameController({ user }) {
       return; 
     }
 
-    const gameDocRef = doc(db, `artifacts/${appId}/public/data/games`, gameId);
+    // O caminho agora é direto para a coleção "games"
+    const gameDocRef = doc(db, "games", gameId);
 
     const unsubscribe = onSnapshot(gameDocRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -128,7 +188,8 @@ function GameController({ user }) {
 
   const handleCreateGame = async () => {
     const newGameId = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const gameDocRef = doc(db, `artifacts/${appId}/public/data/games`, newGameId);
+    
+    const gameDocRef = doc(db, "games", newGameId);
     
     const newGameData = {
       status: 'lobby', 
@@ -149,7 +210,8 @@ function GameController({ user }) {
 
   const handleJoinGame = async (idToJoin) => {
     if (!idToJoin) return;
-    const gameDocRef = doc(db, `artifacts/${appId}/public/data/games`, idToJoin);
+
+    const gameDocRef = doc(db, "games", idToJoin);
     
     try {
       const docSnap = await getDoc(gameDocRef);
@@ -186,7 +248,7 @@ function GameController({ user }) {
       secretPlayers[playerId] = shuffledBoard[playerIndex].name;
     });
 
-    const gameDocRef = doc(db, `artifacts/${appId}/public/data/games`, gameId);
+    const gameDocRef = doc(db, "games", gameId);
     await updateDoc(gameDocRef, {
       status: 'playing',
       board: boardPlayers.map(p => p.name), 
@@ -200,7 +262,7 @@ function GameController({ user }) {
     const mySecretName = gameData.secretPlayers[user.uid];
     
     if (guessName === mySecretName) {
-      const gameDocRef = doc(db, `artifacts/${appId}/public/data/games`, gameId);
+      const gameDocRef = doc(db, "games", gameId);
       await updateDoc(gameDocRef, {
         winners: arrayUnion(user.uid)
       });
@@ -426,6 +488,15 @@ function PlayerCard({ player, isEliminated, onClick }) {
     color: player.textColor || '#000000',
   };
 
+  // Corrigido o URL da imagem de placeholder
+  const handleError = (e) => {
+    e.target.src = 'https://placehold.co/150x150/cccccc/000000?text=Erro';
+  };
+
+  // Corrigido o URL da imagem (removido o sublinhado extra)
+  const imgSrc = player.img.replace(/https?_:/, 'https:');
+
+
   return (
     <div
       onClick={onClick}
@@ -433,10 +504,10 @@ function PlayerCard({ player, isEliminated, onClick }) {
       style={style}
     >
       <img
-        src={player.img}
+        src={imgSrc}
         alt={player.name}
         className="w-full h-20 md:h-24 object-cover object-top"
-        onError={(e) => e.target.src = 'https://placehold.co/150x150/cccccc/000000?text=Erro'}
+        onError={handleError}
       />
       <span className="block text-sm font-semibold p-1 truncate">
         {player.name}
@@ -446,28 +517,40 @@ function PlayerCard({ player, isEliminated, onClick }) {
 }
 
 function GuessModal({ players, onClose, onGuess }) {
+  
+  // Corrigido o URL da imagem de placeholder
+  const handleError = (e) => {
+    e.target.src = 'https://placehold.co/150x150/cccccc/000000?text=Erro';
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-lg p-6 max-w-3xl w-full">
         <h2 className="text-2xl font-bold mb-4">Quem é você?</h2>
         <div className="grid grid-cols-5 gap-2 max-h-[60vh] overflow-y-auto">
-          {players.map(player => (
-            <div
-              key={player.name}
-              onClick={() => onGuess(player.name)}
-              className="rounded-lg shadow-md overflow-hidden text-center cursor-pointer transition-all duration-300 hover:scale-105 hover:border-2 hover:border-yellow-400"
-              style={{ backgroundColor: player.color, color: player.textColor }}
-            >
-              <img
-                src={player.img}
-                alt={player.name}
-                className="w-full h-20 md:h-24 object-cover object-top"
-              />
-              <span className="block text-sm font-semibold p-1 truncate">
-                {player.name}
-              </span>
-            </div>
-          ))}
+          {players.map(player => {
+            // Corrigido o URL da imagem (removido o sublinhado extra)
+            const imgSrc = player.img.replace(/https?_:/, 'https:');
+            
+            return (
+              <div
+                key={player.name}
+                onClick={() => onGuess(player.name)}
+                className="rounded-lg shadow-md overflow-hidden text-center cursor-pointer transition-all duration-300 hover:scale-105 hover:border-2 hover:border-yellow-400"
+                style={{ backgroundColor: player.color, color: player.textColor }}
+              >
+                <img
+                  src={imgSrc}
+                  alt={player.name}
+                  className="w-full h-20 md:h-24 object-cover object-top"
+                  onError={handleError}
+                />
+                <span className="block text-sm font-semibold p-1 truncate">
+                  {player.name}
+                </span>
+              </div>
+            );
+          })}
         </div>
         <button
           onClick={onClose}
@@ -479,4 +562,3 @@ function GuessModal({ players, onClose, onGuess }) {
     </div>
   );
 }
-
