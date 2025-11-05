@@ -18,7 +18,7 @@ import {
 } from 'firebase/firestore';
 
 // --- 1B. BASE DE DADOS INTERNA ---
-// Para resolver erros de importação, a base de dados está incluída aqui.
+// A base de dados está incluída aqui para ser um ficheiro único e robusto.
 const allPlayers = [
   {
     name: "Messi",
@@ -110,28 +110,35 @@ export default function App() {
 
   // Efeito para autenticar o utilizador
   useEffect(() => {
+    // Tenta fazer o login anónimo
     signInAnonymously(auth).catch(err => {
+      // Se falhar (ex: Auth Anónima desligada), define o erro
       console.error("Erro ao autenticar anonimamente:", err);
       setError("Não foi possível ligar ao servidor. Verifique as suas chaves do Firebase e as regras de segurança.");
     });
 
+    // Ouve as mudanças de estado de autenticação
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
+        // Sucesso!
         setUser(currentUser);
         setIsLoading(false);
       } else {
+        // Não é um erro, apenas significa que o utilizador não está logado
         setUser(null);
         setIsLoading(true);
       }
     });
 
+    // Limpa o "ouvinte" quando o componente "desmonta"
     return () => unsubscribe();
   }, []);
 
   // --- RENDERIZAÇÃO ---
 
   if (error) {
-    // Se houver um erro (ex: chaves do Firebase erradas)
+    // ECRÃ VERMELHO DE ERRO
+    // (Aparece se o signInAnonymously falhar)
     return (
       <div className="flex items-center justify-center h-full text-white bg-red-800 p-8">
         <div className="text-center">
@@ -162,19 +169,21 @@ function GameController({ user }) {
   const [gameId, setGameId] = useState(null); // ID da sala (ex: ABC12)
   const [gameData, setGameData] = useState(null); // Dados do jogo (do Firestore)
 
+  // Efeito para "ouvir" a sala de jogo
   useEffect(() => {
     if (!gameId) {
       setGameData(null);
       return; 
     }
 
-    // O caminho agora é direto para a coleção "games"
+    // O caminho correto: coleção "games", documento "gameId"
     const gameDocRef = doc(db, "games", gameId);
 
     const unsubscribe = onSnapshot(gameDocRef, (docSnap) => {
       if (docSnap.exists()) {
         setGameData(docSnap.data());
       } else {
+        // A sala foi apagada ou não existe
         setGameData(null);
         setGameId(null);
         console.warn("A sala de jogo foi fechada ou não existe.");
@@ -186,10 +195,10 @@ function GameController({ user }) {
     return () => unsubscribe();
   }, [gameId]); 
 
+  // Função para CRIAR um jogo
   const handleCreateGame = async () => {
     const newGameId = Math.random().toString(36).substring(2, 7).toUpperCase();
     
-    // Caminho corrigido: direto para a coleção "games"
     const gameDocRef = doc(db, "games", newGameId);
     
     const newGameData = {
@@ -206,44 +215,50 @@ function GameController({ user }) {
       setGameId(newGameId);
     } catch (err) {
       console.error("Erro ao criar jogo:", err);
+      // (As suas REGRAS DO FIRESTORE podem estar a bloquear isto)
     }
   };
 
+  // Função para ENTRAR num jogo
   const handleJoinGame = async (idToJoin) => {
     if (!idToJoin) return;
 
-    // Caminho corrigido: direto para a coleção "games"
     const gameDocRef = doc(db, "games", idToJoin);
     
     try {
       const docSnap = await getDoc(gameDocRef);
       if (docSnap.exists() && docSnap.data().status === 'lobby') {
+        // Adiciona o utilizador à lista de jogadores
         await updateDoc(gameDocRef, {
           players: arrayUnion(user.uid)
         });
         setGameId(idToJoin);
       } else {
         console.warn("Sala não encontrada ou o jogo já começou.");
-        // (idealmente, mostrar um feedback ao user)
       }
     } catch (err) {
       console.error("Erro ao entrar no jogo:", err);
     }
   };
 
+  // Função para SAIR do jogo (voltar ao Lobby)
   const handleLeaveGame = () => {
     setGameId(null);
     setGameData(null);
   };
 
+  // Função para COMEÇAR o jogo (só o Host)
   const handleStartGame = async () => {
     if (!gameData || gameData.hostId !== user.uid || gameData.players.length === 0) {
       return;
     }
 
+    // Embaralha a base de dados
     const shuffledAll = [...allPlayers].sort(() => 0.5 - Math.random());
+    // Pega nos primeiros 25 (ou menos, se a BD for pequena)
     const boardPlayers = shuffledAll.slice(0, Math.min(25, allPlayers.length));
 
+    // Atribui um jogador secreto a cada um
     const shuffledBoard = [...boardPlayers].sort(() => 0.5 - Math.random());
     const secretPlayers = {};
     gameData.players.forEach((playerId, index) => {
@@ -251,7 +266,6 @@ function GameController({ user }) {
       secretPlayers[playerId] = shuffledBoard[playerIndex].name;
     });
 
-    // Caminho corrigido: direto para a coleção "games"
     const gameDocRef = doc(db, "games", gameId);
     await updateDoc(gameDocRef, {
       status: 'playing',
@@ -260,13 +274,14 @@ function GameController({ user }) {
     });
   };
 
+  // Função para DAR PALPITE
   const handleMakeGuess = async (guessName) => {
     if (!gameData) return;
 
     const mySecretName = gameData.secretPlayers[user.uid];
     
     if (guessName === mySecretName) {
-      // Caminho corrigido: direto para a coleção "games"
+      // Acertou!
       const gameDocRef = doc(db, "games", gameId);
       await updateDoc(gameDocRef, {
         winners: arrayUnion(user.uid)
@@ -276,6 +291,8 @@ function GameController({ user }) {
       console.warn("Errado! Tente novamente.");
     }
   };
+
+  // --- Renderização do Controlador ---
 
   if (!gameId || !gameData) {
     return <Lobby onCreate={handleCreateGame} onJoin={handleJoinGame} />;
