@@ -92,8 +92,7 @@ const firebaseConfig = {
   projectId: "jogoquemecraque",
   storageBucket: "jogoquemecraque.firebasestorage.app",
   messagingSenderId: "703914878271",
-  appId: "1:703914878271:web:7b16fc1d02e6acdf8a",
-  measurementId: "G-B339KXCZEC1"
+  appId: "1:703914878271:web:7b16fc1d02e6acdf8a"
 };
 
 // --- 3. INICIALIZAÇÃO DA APLICAÇÃO ---
